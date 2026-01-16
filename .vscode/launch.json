@@ -1,0 +1,22 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug executable 'kusto-language'",
+      "type": "lldb",
+      "request": "launch",
+      "cargo": {
+        "args": ["run", "--bin=kusto-language"]
+      },
+      "args": []
+    },
+    {
+      "name": "Debug unit tests in executable 'kusto-language'",
+      "type": "lldb",
+      "request": "launch",
+      "cargo": {
+        "args": ["test", "--bin=kusto-language"]
+      }
+    }
+  ]
+}
