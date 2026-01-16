@@ -1,0 +1,10 @@
+[package]
+name = "kusto-language"
+description = "Kusto Query Language is a simple and productive language for querying Big Data."
+license = "Apache-2.0"
+version = "0.1.0"
+readme = "README.md"
+authors = ["Hesam Farid Mehr <faridmehr.hesam@gmail.com>"]
+edition = "2024"
+
+[dependencies]
