@@ -38,6 +38,7 @@ pub enum SyntaxKind {
     QuestionToken,
 
     // literal tokens
+    RealLiteralToken,
     RawGuidLiteralToken,
 
     // identifier
@@ -179,6 +180,13 @@ fn next_token(
                     text_span: pos..pos + raw_guid_len,
                 });
             }
+            if let Some(real_len) = scan_real_literal(bytes, pos) {
+                return Some(LexicalToken {
+                    kind: SyntaxKind::RealLiteralToken,
+                    trivia_span: trivia,
+                    text_span: pos..pos + real_len,
+                });
+            }
             if let Some(id_len) = scan_identifier(bytes, pos) {
                 return Some(LexicalToken {
                     kind: SyntaxKind::IdentifierToken,
@@ -315,10 +323,11 @@ fn parse_punctuation(bytes: &[u8], start: usize) -> Option<(SyntaxKind, Range<us
 }
 
 fn scan_identifier(bytes: &[u8], start: usize) -> Option<usize> {
-    let byte = peek(bytes, start)?;
     let mut pos = start;
 
-    if is_identifier_start_char(*byte) {
+    if let Some(&byte) = peek(bytes, start)
+        && is_identifier_start_char(byte)
+    {
         pos += 1;
         pos += bytes[pos..]
             .iter()
@@ -420,18 +429,75 @@ fn scan_hex_digits(bytes: &[u8], start: usize, count: usize) -> Option<usize> {
     Some(pos - start)
 }
 
+fn scan_real_literal(bytes: &[u8], start: usize) -> Option<usize> {
+    let digit_len = scan_digits(bytes, start)?;
+    let mut pos = start + digit_len;
+
+    if peek(bytes, pos) == Some(&b'.')
+        && peek(bytes, pos + 1) != Some(&b'.')
+        && peek(bytes, pos + 2) != Some(&b'.')
+    {
+        pos += 1;
+
+        if let Some(frac_len) = scan_digits(bytes, pos) {
+            pos += frac_len;
+        }
+
+        if let Some(exp_len) = scan_exponent(bytes, pos) {
+            pos += exp_len;
+        }
+    } else {
+        if let Some(exp_len) = scan_exponent(bytes, pos) {
+            pos += exp_len;
+        } else {
+            return None;
+        }
+    }
+
+    if let Some(&byte) = peek(bytes, pos)
+        && is_identifier_char(byte)
+    {
+        return None;
+    }
+
+    Some(pos - start)
+}
+
+fn scan_exponent(bytes: &[u8], start: usize) -> Option<usize> {
+    let mut pos = start;
+
+    if let Some(&byte) = peek(bytes, pos) {
+        if byte == b'e' || byte == b'E' {
+            pos += 1;
+
+            if let Some(&next_byte) = peek(bytes, pos) {
+                if next_byte == b'+' || next_byte == b'-' {
+                    pos += 1;
+                }
+            }
+
+            let digit_len = scan_digits(bytes, pos)?;
+            pos += digit_len;
+
+            return Some(pos - start);
+        }
+    }
+
+    None
+}
+
 fn get_next_line_start(bytes: &[u8], start: usize) -> Option<usize> {
     let next_start = get_next_line_break_start(bytes, start)?;
-    let line_break_length = get_next_line_break_length(bytes, next_start)?;
+    let line_break_len = get_next_line_break_len(bytes, next_start)?;
 
-    Some(next_start + line_break_length)
+    Some(next_start + line_break_len)
 }
 
 fn get_line_end(bytes: &[u8], start: usize) -> usize {
-    start + get_line_length(bytes, start, false)
+    start + get_line_len(bytes, start, false)
 }
 
-fn get_line_length(bytes: &[u8], start: usize, include_line_break: bool) -> usize {
+fn get_line_len(bytes: &[u8], start: usize, include_line_break: bool) -> usize {
     let mut pos = start;
 
     while let Some(&byte) = peek(bytes, pos)
@@ -441,15 +507,15 @@ fn get_line_length(bytes: &[u8], start: usize, include_line_break: bool) -> usiz
     }
 
     if include_line_break
-        && let Some(line_break_length) = get_next_line_break_length(bytes, start)
+        && let Some(line_break_len) = get_next_line_break_len(bytes, start)
     {
-        pos += line_break_length
+        pos += line_break_len
     }
 
     pos - start
 }
 
-fn get_next_line_break_length(bytes: &[u8], start: usize) -> Option<usize> {
+fn get_next_line_break_len(bytes: &[u8], start: usize) -> Option<usize> {
     let break_start = get_next_line_break_start(bytes, start)?;
 
     if peek(bytes, break_start) == Some(&b'\r')
@@ -736,6 +802,24 @@ mod tests {
 
             assert_eq!(tokens.len(), 1, "{input}");
             assert_eq!(tokens[0].kind, SyntaxKind::RawGuidLiteralToken);
+            assert_eq!(get_text(input, tokens[0].trivia_span.clone()), "");
+            assert_eq!(get_text(input, tokens[0].text_span.clone()), input);
+        }
+    }
+
+    #[test]
+    fn test_real_literal() {
+        let possible_inputs = vec![
+            "1.0", "1.0e10", "1.0E10", "1.0e-10", "1.0E-10", "1.0e+10", "1.0E+10",
+            "1.e-5", "1.E-5",
+        ];
+
+        for input in possible_inputs {
+            let options = ParseOptions::new(false);
+            let tokens = parse_tokens(input, &options);
+
+            assert_eq!(tokens.len(), 1, "{input}");
+            assert_eq!(tokens[0].kind, SyntaxKind::RealLiteralToken);
             assert_eq!(get_text(input, tokens[0].trivia_span.clone()), "");
             assert_eq!(get_text(input, tokens[0].text_span.clone()), input);
         }
