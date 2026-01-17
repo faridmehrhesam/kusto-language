@@ -37,6 +37,9 @@ pub enum SyntaxKind {
     AtToken,
     QuestionToken,
 
+    // identifier
+    IdentifierToken,
+
     // other tokens
     DirectiveToken,
     EndOfTextToken,
@@ -146,6 +149,24 @@ fn next_token(
                 }
 
                 return None;
+            }
+        }
+
+        if is_identifier_start_char(byte) {
+            if let Some(id_len) = scan_identifier(bytes, pos) {
+                return Some(LexicalToken {
+                    kind: SyntaxKind::IdentifierToken,
+                    trivia_span: trivia,
+                    text_span: pos..pos + id_len,
+                });
+            }
+        } else if byte.is_ascii_digit() {
+            if let Some(id_len) = scan_identifier(bytes, pos) {
+                return Some(LexicalToken {
+                    kind: SyntaxKind::IdentifierToken,
+                    trivia_span: trivia,
+                    text_span: pos..pos + id_len,
+                });
             }
         }
     } else {
@@ -275,9 +296,52 @@ fn parse_punctuation(bytes: &[u8], start: usize) -> Option<(SyntaxKind, Range<us
     Some((kind, start..start + width))
 }
 
+fn scan_identifier(bytes: &[u8], start: usize) -> Option<usize> {
+    let byte = peek(bytes, start)?;
+    let mut pos = start;
+
+    if is_identifier_start_char(*byte) {
+        pos += 1;
+        pos += bytes[pos..]
+            .iter()
+            .take_while(|&&b| is_identifier_char(b))
+            .count();
+    } else if let Some(digit_count) = scan_digits(bytes, pos) {
+        if let Some(next_byte) = peek(bytes, pos + digit_count) {
+            // must have at least one one letter or _ after digits
+            if next_byte.is_ascii_alphabetic() || *next_byte == b'_' {
+                pos += digit_count;
+                pos += bytes[pos..]
+                    .iter()
+                    .take_while(|&&b| is_identifier_char(b))
+                    .count();
+            }
+        }
+    }
+
+    if pos == start {
+        None
+    } else {
+        Some(pos - start)
+    }
+}
+
+fn scan_digits(bytes: &[u8], start: usize) -> Option<usize> {
+    let digit_count = bytes[start..]
+        .iter()
+        .take_while(|&&b| b.is_ascii_digit())
+        .count();
+
+    if digit_count == 0 {
+        None
+    } else {
+        Some(digit_count)
+    }
+}
+
 fn get_next_line_start(bytes: &[u8], start: usize) -> Option<usize> {
     let next_start = get_next_line_break_start(bytes, start)?;
-    let line_break_length = get_line_break_length(bytes, next_start)?;
+    let line_break_length = get_next_line_break_length(bytes, next_start)?;
 
     Some(next_start + line_break_length)
 }
@@ -296,7 +360,7 @@ fn get_line_length(bytes: &[u8], start: usize, include_line_break: bool) -> usiz
     }
 
     if include_line_break
-        && let Some(line_break_length) = get_line_break_length(bytes, start)
+        && let Some(line_break_length) = get_next_line_break_length(bytes, start)
     {
         pos += line_break_length
     }
@@ -304,7 +368,7 @@ fn get_line_length(bytes: &[u8], start: usize, include_line_break: bool) -> usiz
     pos - start
 }
 
-fn get_line_break_length(bytes: &[u8], start: usize) -> Option<usize> {
+fn get_next_line_break_length(bytes: &[u8], start: usize) -> Option<usize> {
     let break_start = get_next_line_break_start(bytes, start)?;
 
     if peek(bytes, break_start) == Some(&b'\r')
@@ -345,6 +409,16 @@ fn is_line_break_start(byte: u8) -> bool {
 #[inline(always)]
 fn is_string_literal_start_quote(byte: u8) -> bool {
     byte == b'"' || byte == b'\''
+}
+
+#[inline(always)]
+fn is_identifier_start_char(byte: u8) -> bool {
+    byte.is_ascii_alphabetic() || byte == b'_' || byte == b'$'
+}
+
+#[inline(always)]
+fn is_identifier_char(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || byte == b'_'
 }
 
 #[cfg(test)]
@@ -547,5 +621,23 @@ mod tests {
         assert_eq!(tokens[0].kind, SyntaxKind::PlusToken);
         assert_eq!(tokens[1].kind, SyntaxKind::DirectiveToken);
         assert_eq!(tokens[2].kind, SyntaxKind::PlusToken);
+    }
+
+    #[test]
+    fn test_identifier() {
+        let possible_inputs = vec![
+            "Column", "Column1", "Column_", "_Column", "_Column1", "_Column_", "$Column",
+            "$Column1", "$Column_", "1Column", "1_",
+        ];
+
+        for input in possible_inputs {
+            let options = ParseOptions::new(false);
+            let tokens = parse_tokens(input, &options);
+
+            assert_eq!(tokens.len(), 1, "{input}");
+            assert_eq!(tokens[0].kind, SyntaxKind::IdentifierToken);
+            assert_eq!(get_text(input, tokens[0].trivia_span.clone()), "");
+            assert_eq!(get_text(input, tokens[0].text_span.clone()), input);
+        }
     }
 }
