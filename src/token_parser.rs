@@ -38,6 +38,7 @@ pub enum SyntaxKind {
     QuestionToken,
 
     // other tokens
+    DirectiveToken,
     EndOfTextToken,
     BadToken,
 }
@@ -124,7 +125,18 @@ fn next_token(
         if !byte.is_ascii_alphanumeric() {
             if let Some((kind, range)) = parse_punctuation(bytes, pos) {
                 return Some(LexicalToken::new(kind, trivia, range));
-            } else if is_at_end(bytes, pos) {
+            }
+
+            if byte == b'#' {
+                let directive_end = get_line_end(bytes, pos);
+                return Some(LexicalToken {
+                    kind: SyntaxKind::DirectiveToken,
+                    trivia_span: trivia,
+                    text_span: pos..directive_end,
+                });
+            }
+
+            if is_at_end(bytes, pos) {
                 if has_trivia || options.always_produce_end_tokens {
                     return Some(LexicalToken::new(
                         SyntaxKind::EndOfTextToken,
@@ -167,7 +179,11 @@ fn parse_trivia(bytes: &[u8], start: usize) -> Option<Range<usize>> {
 
         // line comment
         if peek(bytes, pos) == Some(&b'/') && peek(bytes, pos + 1) == Some(&b'/') {
-            pos = get_next_line_start(bytes, pos);
+            if let Some(next_line_start) = get_next_line_start(bytes, pos) {
+                pos = next_line_start;
+            } else {
+                pos = bytes.len();
+            }
         }
 
         if pos == before {
@@ -259,25 +275,56 @@ fn parse_punctuation(bytes: &[u8], start: usize) -> Option<(SyntaxKind, Range<us
     Some((kind, start..start + width))
 }
 
-fn get_next_line_start(bytes: &[u8], start: usize) -> usize {
-    // Look for \n or \r
-    let line_break_pos = bytes[start..]
-        .iter()
-        .position(|&b| b == b'\n' || b == b'\r');
+fn get_next_line_start(bytes: &[u8], start: usize) -> Option<usize> {
+    let next_start = get_next_line_break_start(bytes, start)?;
+    let line_break_length = get_line_break_length(bytes, next_start)?;
 
-    if let Some(rel_pos) = line_break_pos {
-        let break_start = start + rel_pos;
-        let break_len = if bytes.get(break_start) == Some(&b'\r')
-            && bytes.get(break_start + 1) == Some(&b'\n')
-        {
-            2
-        } else {
-            1
-        };
-        break_start + break_len
-    } else {
-        bytes.len()
+    Some(next_start + line_break_length)
+}
+
+fn get_line_end(bytes: &[u8], start: usize) -> usize {
+    start + get_line_length(bytes, start, false)
+}
+
+fn get_line_length(bytes: &[u8], start: usize, include_line_break: bool) -> usize {
+    let mut pos = start;
+
+    while let Some(&byte) = peek(bytes, pos)
+        && !is_line_break_start(byte)
+    {
+        pos += 1;
     }
+
+    if include_line_break
+        && let Some(line_break_length) = get_line_break_length(bytes, start)
+    {
+        pos += line_break_length
+    }
+
+    pos - start
+}
+
+fn get_line_break_length(bytes: &[u8], start: usize) -> Option<usize> {
+    let break_start = get_next_line_break_start(bytes, start)?;
+
+    if peek(bytes, break_start) == Some(&b'\r')
+        && peek(bytes, break_start + 1) == Some(&b'\n')
+    {
+        Some(2)
+    } else {
+        Some(1)
+    }
+}
+
+fn get_next_line_break_start(bytes: &[u8], start: usize) -> Option<usize> {
+    if let Some(rel_pos) = bytes[start..]
+        .iter()
+        .position(|&b| b == b'\n' || b == b'\r')
+    {
+        return Some(rel_pos + start);
+    }
+
+    None
 }
 
 #[inline(always)]
@@ -290,6 +337,12 @@ fn is_at_end(bytes: &[u8], pos: usize) -> bool {
     pos >= bytes.len()
 }
 
+#[inline(always)]
+fn is_line_break_start(byte: u8) -> bool {
+    byte == b'\r' || byte == b'\n'
+}
+
+#[inline(always)]
 fn is_string_literal_start_quote(byte: u8) -> bool {
     byte == b'"' || byte == b'\''
 }
@@ -366,7 +419,7 @@ mod tests {
 
     #[test]
     fn test_bad_token() {
-        let input = "नमस्ते"; // Non-ASCII
+        let input = "این یک متن فارسی است"; // Non-ASCII
         let options = ParseOptions::default();
         let tokens = parse_tokens(input, &options);
 
@@ -472,5 +525,27 @@ mod tests {
                 i, expected_kind, tokens[i].kind
             );
         }
+    }
+
+    #[test]
+    fn test_directive() {
+        let input = "#crp query_language=kql";
+        let options = ParseOptions::new(false);
+        let tokens = parse_tokens(input, &options);
+
+        assert_eq!(tokens.len(), 1);
+        assert_eq!(tokens[0].kind, SyntaxKind::DirectiveToken);
+    }
+
+    #[test]
+    fn test_directive_with_other_tokens() {
+        let input = " + #crp query_language=kql\n +";
+        let options = ParseOptions::new(false);
+        let tokens = parse_tokens(input, &options);
+
+        assert_eq!(tokens.len(), 3);
+        assert_eq!(tokens[0].kind, SyntaxKind::PlusToken);
+        assert_eq!(tokens[1].kind, SyntaxKind::DirectiveToken);
+        assert_eq!(tokens[2].kind, SyntaxKind::PlusToken);
     }
 }
