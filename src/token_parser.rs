@@ -1,6 +1,41 @@
 use std::ops::Range;
 
 const AVG_BYTES_PER_TOKEN: usize = 5;
+const TIMESPAN_SUFFIXES: &[&[u8]] = &[
+    b"microseconds",
+    b"milliseconds",
+    b"nanoseconds",
+    b"microsecond",
+    b"millisecond",
+    b"nanosecond",
+    b"microsec",
+    b"millisec",
+    b"nanosec",
+    b"minutes",
+    b"seconds",
+    b"hours",
+    b"micros",
+    b"millis",
+    b"nanos",
+    b"minute",
+    b"second",
+    b"hour",
+    b"micro",
+    b"milli",
+    b"nano",
+    b"ticks",
+    b"tick",
+    b"hrs",
+    b"sec",
+    b"min",
+    b"day",
+    b"ms",
+    b"hr",
+    b"d",
+    b"h",
+    b"m",
+    b"s",
+];
 
 #[derive(Debug, PartialEq, Clone, Copy, Eq)]
 pub enum SyntaxKind {
@@ -39,6 +74,7 @@ pub enum SyntaxKind {
 
     // literal tokens
     RealLiteralToken,
+    TimespanLiteralToken,
     RawGuidLiteralToken,
 
     // identifier
@@ -185,6 +221,13 @@ fn next_token(
                     kind: SyntaxKind::RealLiteralToken,
                     trivia_span: trivia,
                     text_span: pos..pos + real_len,
+                });
+            }
+            if let Some(timespan_len) = scan_timespan_literal(bytes, pos) {
+                return Some(LexicalToken {
+                    kind: SyntaxKind::TimespanLiteralToken,
+                    trivia_span: trivia,
+                    text_span: pos..pos + timespan_len,
                 });
             }
             if let Some(id_len) = scan_identifier(bytes, pos) {
@@ -486,6 +529,28 @@ fn scan_exponent(bytes: &[u8], start: usize) -> Option<usize> {
     None
 }
 
+fn scan_timespan_literal(bytes: &[u8], start: usize) -> Option<usize> {
+    let mut len = scan_digits(bytes, start)?;
+    if peek(bytes, start + len) == Some(&b'.') {
+        let frac_len = scan_digits(bytes, start + len + 1)?;
+        len += 1 + frac_len;
+    }
+
+    if let Some(suffix_len) = get_timespan_longest_suffix(bytes, start + len) {
+        len += suffix_len;
+
+        if let Some(&byte) = peek(bytes, start + len)
+            && is_identifier_char(byte)
+        {
+            return None;
+        }
+
+        return Some(len);
+    }
+
+    None
+}
+
 fn get_next_line_start(bytes: &[u8], start: usize) -> Option<usize> {
     let next_start = get_next_line_break_start(bytes, start)?;
     let line_break_len = get_next_line_break_len(bytes, next_start)?;
@@ -533,6 +598,17 @@ fn get_next_line_break_start(bytes: &[u8], start: usize) -> Option<usize> {
         .position(|&b| b == b'\n' || b == b'\r')
     {
         return Some(rel_pos + start);
+    }
+
+    None
+}
+
+fn get_timespan_longest_suffix(bytes: &[u8], start: usize) -> Option<usize> {
+    for suffix in TIMESPAN_SUFFIXES {
+        let len = suffix.len();
+        if bytes.get(start..start + len) == Some(*suffix) {
+            return Some(len);
+        }
     }
 
     None
@@ -820,6 +896,57 @@ mod tests {
 
             assert_eq!(tokens.len(), 1, "{input}");
             assert_eq!(tokens[0].kind, SyntaxKind::RealLiteralToken);
+            assert_eq!(get_text(input, tokens[0].trivia_span.clone()), "");
+            assert_eq!(get_text(input, tokens[0].text_span.clone()), input);
+        }
+    }
+
+    #[test]
+    fn test_timespan_literal() {
+        let possible_inputs = vec![
+            "100microseconds",
+            "200milliseconds",
+            "300nanoseconds",
+            "400microsecond",
+            "500millisecond",
+            "600nanosecond",
+            "700microsec",
+            "800millisec",
+            "900nanosec",
+            "10minutes",
+            "20seconds",
+            "30hours",
+            "40micros",
+            "50millis",
+            "60nanos",
+            "70minute",
+            "80second",
+            "90hour",
+            "100micro",
+            "200milli",
+            "300nano",
+            "400ticks",
+            "500tick",
+            "600hrs",
+            "700sec",
+            "800min",
+            "900day",
+            "1000ms",
+            "1100hr",
+            "1200d",
+            "1300h",
+            "1400m",
+            "1500s",
+            // with fractional part
+            "1.5seconds",
+        ];
+
+        for input in possible_inputs {
+            let options = ParseOptions::new(false);
+            let tokens = parse_tokens(input, &options);
+
+            assert_eq!(tokens.len(), 1, "{input}");
+            assert_eq!(tokens[0].kind, SyntaxKind::TimespanLiteralToken);
             assert_eq!(get_text(input, tokens[0].trivia_span.clone()), "");
             assert_eq!(get_text(input, tokens[0].text_span.clone()), input);
         }
