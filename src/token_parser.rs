@@ -37,6 +37,9 @@ pub enum SyntaxKind {
     AtToken,
     QuestionToken,
 
+    // literal tokens
+    RawGuidLiteralToken,
+
     // identifier
     IdentifierToken,
 
@@ -153,6 +156,14 @@ fn next_token(
         }
 
         if is_identifier_start_char(byte) {
+            if let Some(raw_guid_len) = scan_raw_guid_literal(bytes, pos) {
+                return Some(LexicalToken {
+                    kind: SyntaxKind::RawGuidLiteralToken,
+                    trivia_span: trivia,
+                    text_span: pos..pos + raw_guid_len,
+                });
+            }
+
             if let Some(id_len) = scan_identifier(bytes, pos) {
                 return Some(LexicalToken {
                     kind: SyntaxKind::IdentifierToken,
@@ -161,6 +172,13 @@ fn next_token(
                 });
             }
         } else if byte.is_ascii_digit() {
+            if let Some(raw_guid_len) = scan_raw_guid_literal(bytes, pos) {
+                return Some(LexicalToken {
+                    kind: SyntaxKind::RawGuidLiteralToken,
+                    trivia_span: trivia,
+                    text_span: pos..pos + raw_guid_len,
+                });
+            }
             if let Some(id_len) = scan_identifier(bytes, pos) {
                 return Some(LexicalToken {
                     kind: SyntaxKind::IdentifierToken,
@@ -337,6 +355,69 @@ fn scan_digits(bytes: &[u8], start: usize) -> Option<usize> {
     } else {
         Some(digit_count)
     }
+}
+
+fn scan_raw_guid_literal(bytes: &[u8], start: usize) -> Option<usize> {
+    let mut pos = start;
+
+    // 8 hex digits
+    let eight_hex_len = scan_hex_digits(bytes, pos, 8)?;
+    pos += eight_hex_len;
+
+    // '-'
+    if peek(bytes, pos) != Some(&b'-') {
+        return None;
+    }
+    pos += 1;
+
+    // 4 hex digits
+    let four_hex_len = scan_hex_digits(bytes, pos, 4)?;
+    pos += four_hex_len;
+
+    // '-'
+    if peek(bytes, pos) != Some(&b'-') {
+        return None;
+    }
+    pos += 1;
+
+    // 4 hex digits
+    let four_hex_len = scan_hex_digits(bytes, pos, 4)?;
+    pos += four_hex_len;
+
+    // '-'
+    if peek(bytes, pos) != Some(&b'-') {
+        return None;
+    }
+    pos += 1;
+
+    // 4 hex digits
+    let four_hex_len = scan_hex_digits(bytes, pos, 4)?;
+    pos += four_hex_len;
+
+    // '-'
+    if peek(bytes, pos) != Some(&b'-') {
+        return None;
+    }
+    pos += 1;
+
+    // 12 hex digits
+    let twelve_hex_len = scan_hex_digits(bytes, pos, 12)?;
+    pos += twelve_hex_len;
+
+    Some(pos - start)
+}
+
+fn scan_hex_digits(bytes: &[u8], start: usize, count: usize) -> Option<usize> {
+    let mut pos = start;
+    for _ in 0..count {
+        let byte = peek(bytes, pos)?;
+        if !byte.is_ascii_hexdigit() {
+            return None;
+        }
+        pos += 1;
+    }
+
+    Some(pos - start)
 }
 
 fn get_next_line_start(bytes: &[u8], start: usize) -> Option<usize> {
@@ -636,6 +717,25 @@ mod tests {
 
             assert_eq!(tokens.len(), 1, "{input}");
             assert_eq!(tokens[0].kind, SyntaxKind::IdentifierToken);
+            assert_eq!(get_text(input, tokens[0].trivia_span.clone()), "");
+            assert_eq!(get_text(input, tokens[0].text_span.clone()), input);
+        }
+    }
+
+    #[test]
+    fn test_raw_guid_literal() {
+        let possible_inputs = vec![
+            "123e4567-e89b-12d3-a456-426614174000",
+            "00000000-0000-0000-0000-000000000000",
+            "ffffffff-ffff-ffff-ffff-ffffffffffff",
+        ];
+
+        for input in possible_inputs {
+            let options = ParseOptions::new(false);
+            let tokens = parse_tokens(input, &options);
+
+            assert_eq!(tokens.len(), 1, "{input}");
+            assert_eq!(tokens[0].kind, SyntaxKind::RawGuidLiteralToken);
             assert_eq!(get_text(input, tokens[0].trivia_span.clone()), "");
             assert_eq!(get_text(input, tokens[0].text_span.clone()), input);
         }
