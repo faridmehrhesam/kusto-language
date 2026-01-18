@@ -73,6 +73,7 @@ pub enum SyntaxKind {
     QuestionToken,
 
     // literal tokens
+    LongLiteralToken,
     RealLiteralToken,
     TimespanLiteralToken,
     RawGuidLiteralToken,
@@ -228,6 +229,13 @@ fn next_token(
                     kind: SyntaxKind::TimespanLiteralToken,
                     trivia_span: trivia,
                     text_span: pos..pos + timespan_len,
+                });
+            }
+            if let Some(long_len) = scan_long_literal(bytes, pos) {
+                return Some(LexicalToken {
+                    kind: SyntaxKind::LongLiteralToken,
+                    trivia_span: trivia,
+                    text_span: pos..pos + long_len,
                 });
             }
             if let Some(id_len) = scan_identifier(bytes, pos) {
@@ -413,7 +421,7 @@ fn scan_raw_guid_literal(bytes: &[u8], start: usize) -> Option<usize> {
     let mut pos = start;
 
     // 8 hex digits
-    let eight_hex_len = scan_hex_digits(bytes, pos, 8)?;
+    let eight_hex_len = scan_hex_digits(bytes, pos, Some(8))?;
     pos += eight_hex_len;
 
     // '-'
@@ -423,7 +431,7 @@ fn scan_raw_guid_literal(bytes: &[u8], start: usize) -> Option<usize> {
     pos += 1;
 
     // 4 hex digits
-    let four_hex_len = scan_hex_digits(bytes, pos, 4)?;
+    let four_hex_len = scan_hex_digits(bytes, pos, Some(4))?;
     pos += four_hex_len;
 
     // '-'
@@ -433,7 +441,7 @@ fn scan_raw_guid_literal(bytes: &[u8], start: usize) -> Option<usize> {
     pos += 1;
 
     // 4 hex digits
-    let four_hex_len = scan_hex_digits(bytes, pos, 4)?;
+    let four_hex_len = scan_hex_digits(bytes, pos, Some(4))?;
     pos += four_hex_len;
 
     // '-'
@@ -443,7 +451,7 @@ fn scan_raw_guid_literal(bytes: &[u8], start: usize) -> Option<usize> {
     pos += 1;
 
     // 4 hex digits
-    let four_hex_len = scan_hex_digits(bytes, pos, 4)?;
+    let four_hex_len = scan_hex_digits(bytes, pos, Some(4))?;
     pos += four_hex_len;
 
     // '-'
@@ -453,23 +461,33 @@ fn scan_raw_guid_literal(bytes: &[u8], start: usize) -> Option<usize> {
     pos += 1;
 
     // 12 hex digits
-    let twelve_hex_len = scan_hex_digits(bytes, pos, 12)?;
+    let twelve_hex_len = scan_hex_digits(bytes, pos, Some(12))?;
     pos += twelve_hex_len;
 
     Some(pos - start)
 }
 
-fn scan_hex_digits(bytes: &[u8], start: usize, count: usize) -> Option<usize> {
+fn scan_hex_digits(bytes: &[u8], start: usize, count: Option<usize>) -> Option<usize> {
     let mut pos = start;
-    for _ in 0..count {
-        let byte = peek(bytes, pos)?;
-        if !byte.is_ascii_hexdigit() {
-            return None;
-        }
-        pos += 1;
-    }
 
-    Some(pos - start)
+    if let Some(count_val) = count {
+        for _ in 0..count_val {
+            let byte = peek(bytes, pos)?;
+            if !byte.is_ascii_hexdigit() {
+                return None;
+            }
+            pos += 1;
+        }
+
+        return Some(pos - start);
+    } else {
+        let hex_len = bytes[start..]
+            .iter()
+            .take_while(|&&b| b.is_ascii_hexdigit())
+            .count();
+
+        return if hex_len == 0 { None } else { Some(hex_len) };
+    }
 }
 
 fn scan_real_literal(bytes: &[u8], start: usize) -> Option<usize> {
@@ -549,6 +567,41 @@ fn scan_timespan_literal(bytes: &[u8], start: usize) -> Option<usize> {
     }
 
     None
+}
+
+fn scan_long_literal(bytes: &[u8], start: usize) -> Option<usize> {
+    if let Some(hex_len) = scan_hex_integer_literal(bytes, start) {
+        return Some(hex_len);
+    }
+
+    let digit_len = scan_digits(bytes, start)?;
+    if let Some(&byte) = peek(bytes, start + digit_len)
+        && is_identifier_char(byte)
+    {
+        return None;
+    }
+
+    Some(digit_len)
+}
+
+fn scan_hex_integer_literal(bytes: &[u8], start: usize) -> Option<usize> {
+    let mut pos = start;
+
+    if peek(bytes, pos) == Some(&b'0')
+        && (peek(bytes, pos + 1) == Some(&b'x') || peek(bytes, pos + 1) == Some(&b'X'))
+    {
+        pos += 2;
+        let hex_len = scan_hex_digits(bytes, pos, None)?;
+        pos += hex_len;
+    }
+
+    if let Some(&byte) = peek(bytes, start + pos)
+        && is_identifier_char(byte)
+    {
+        return None;
+    }
+
+    return Some(pos - start);
 }
 
 fn get_next_line_start(bytes: &[u8], start: usize) -> Option<usize> {
@@ -947,6 +1000,27 @@ mod tests {
 
             assert_eq!(tokens.len(), 1, "{input}");
             assert_eq!(tokens[0].kind, SyntaxKind::TimespanLiteralToken);
+            assert_eq!(get_text(input, tokens[0].trivia_span.clone()), "");
+            assert_eq!(get_text(input, tokens[0].text_span.clone()), input);
+        }
+    }
+
+    #[test]
+    fn test_long_literal() {
+        let possible_inputs = vec![
+            "1234567890",
+            "0",
+            "9876543210123456789",
+            "0x1A2B3C4D5E6F",
+            "0XABCDEF123456",
+        ];
+
+        for input in possible_inputs {
+            let options = ParseOptions::new(false);
+            let tokens = parse_tokens(input, &options);
+
+            assert_eq!(tokens.len(), 1, "{input}");
+            assert_eq!(tokens[0].kind, SyntaxKind::LongLiteralToken);
             assert_eq!(get_text(input, tokens[0].trivia_span.clone()), "");
             assert_eq!(get_text(input, tokens[0].text_span.clone()), input);
         }
