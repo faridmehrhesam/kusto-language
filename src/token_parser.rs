@@ -154,11 +154,7 @@ pub fn parse_tokens(text: &str, options: &ParseOptions) -> Vec<LexicalToken> {
     tokens
 }
 
-fn next_token(
-    bytes: &[u8],
-    start: usize,
-    options: &ParseOptions,
-) -> Option<LexicalToken> {
+fn next_token(bytes: &[u8], start: usize, options: &ParseOptions) -> Option<LexicalToken> {
     let mut pos = start;
     let trivia = parse_trivia(bytes, start).unwrap_or(start..start);
     let has_trivia = !trivia.is_empty();
@@ -358,11 +354,10 @@ fn parse_punctuation(bytes: &[u8], start: usize) -> Option<(SyntaxKind, Range<us
         b';' => (SyntaxKind::SemicolonToken, 1),
         b',' => (SyntaxKind::CommaToken, 1),
         b'@' => {
-            let next_byte = peek(bytes, start + 1);
-            if let Some(&b) = next_byte {
-                if is_string_literal_start_quote(b) {
-                    return None;
-                }
+            if let Some(&b) = peek(bytes, start + 1)
+                && is_string_literal_start_quote(b)
+            {
+                return None;
             }
             (SyntaxKind::AtToken, 1)
         }
@@ -384,16 +379,16 @@ fn scan_identifier(bytes: &[u8], start: usize) -> Option<usize> {
             .iter()
             .take_while(|&&b| is_identifier_char(b))
             .count();
-    } else if let Some(digit_count) = scan_digits(bytes, pos) {
-        if let Some(next_byte) = peek(bytes, pos + digit_count) {
-            // must have at least one one letter or _ after digits
-            if next_byte.is_ascii_alphabetic() || *next_byte == b'_' {
-                pos += digit_count;
-                pos += bytes[pos..]
-                    .iter()
-                    .take_while(|&&b| is_identifier_char(b))
-                    .count();
-            }
+    } else if let Some(digit_count) = scan_digits(bytes, pos)
+        && let Some(next_byte) = peek(bytes, pos + digit_count)
+    {
+        // must have at least one one letter or _ after digits
+        if next_byte.is_ascii_alphabetic() || *next_byte == b'_' {
+            pos += digit_count;
+            pos += bytes[pos..]
+                .iter()
+                .take_while(|&&b| is_identifier_char(b))
+                .count();
         }
     }
 
@@ -480,14 +475,14 @@ fn scan_hex_digits(bytes: &[u8], start: usize, count: Option<usize>) -> Option<u
         }
 
         return Some(pos - start);
-    } else {
-        let hex_len = bytes[start..]
-            .iter()
-            .take_while(|&&b| b.is_ascii_hexdigit())
-            .count();
-
-        return if hex_len == 0 { None } else { Some(hex_len) };
     }
+
+    let hex_len = bytes[start..]
+        .iter()
+        .take_while(|&&b| b.is_ascii_hexdigit())
+        .count();
+
+    if hex_len == 0 { None } else { Some(hex_len) }
 }
 
 fn scan_real_literal(bytes: &[u8], start: usize) -> Option<usize> {
@@ -507,12 +502,10 @@ fn scan_real_literal(bytes: &[u8], start: usize) -> Option<usize> {
         if let Some(exp_len) = scan_exponent(bytes, pos) {
             pos += exp_len;
         }
+    } else if let Some(exp_len) = scan_exponent(bytes, pos) {
+        pos += exp_len;
     } else {
-        if let Some(exp_len) = scan_exponent(bytes, pos) {
-            pos += exp_len;
-        } else {
-            return None;
-        }
+        return None;
     }
 
     if let Some(&byte) = peek(bytes, pos)
@@ -527,21 +520,21 @@ fn scan_real_literal(bytes: &[u8], start: usize) -> Option<usize> {
 fn scan_exponent(bytes: &[u8], start: usize) -> Option<usize> {
     let mut pos = start;
 
-    if let Some(&byte) = peek(bytes, pos) {
-        if byte == b'e' || byte == b'E' {
+    if let Some(&byte) = peek(bytes, pos)
+        && (byte == b'e' || byte == b'E')
+    {
+        pos += 1;
+
+        if let Some(&next_byte) = peek(bytes, pos)
+            && (next_byte == b'+' || next_byte == b'-')
+        {
             pos += 1;
-
-            if let Some(&next_byte) = peek(bytes, pos) {
-                if next_byte == b'+' || next_byte == b'-' {
-                    pos += 1;
-                }
-            }
-
-            let digit_len = scan_digits(bytes, pos)?;
-            pos += digit_len;
-
-            return Some(pos - start);
         }
+
+        let digit_len = scan_digits(bytes, pos)?;
+        pos += digit_len;
+
+        return Some(pos - start);
     }
 
     None
@@ -601,7 +594,7 @@ fn scan_hex_integer_literal(bytes: &[u8], start: usize) -> Option<usize> {
         return None;
     }
 
-    return Some(pos - start);
+    Some(pos - start)
 }
 
 fn get_next_line_start(bytes: &[u8], start: usize) -> Option<usize> {
@@ -624,9 +617,7 @@ fn get_line_len(bytes: &[u8], start: usize, include_line_break: bool) -> usize {
         pos += 1;
     }
 
-    if include_line_break
-        && let Some(line_break_len) = get_next_line_break_len(bytes, start)
-    {
+    if include_line_break && let Some(line_break_len) = get_next_line_break_len(bytes, start) {
         pos += line_break_len
     }
 
@@ -636,9 +627,7 @@ fn get_line_len(bytes: &[u8], start: usize, include_line_break: bool) -> usize {
 fn get_next_line_break_len(bytes: &[u8], start: usize) -> Option<usize> {
     let break_start = get_next_line_break_start(bytes, start)?;
 
-    if peek(bytes, break_start) == Some(&b'\r')
-        && peek(bytes, break_start + 1) == Some(&b'\n')
-    {
+    if peek(bytes, break_start) == Some(&b'\r') && peek(bytes, break_start + 1) == Some(&b'\n') {
         Some(2)
     } else {
         Some(1)
@@ -822,8 +811,7 @@ mod tests {
 
     #[test]
     fn test_all_possible_punctuations() {
-        let input =
-            "( ) [ ] { } | . .. + - * / % < <= <| <> > >= = == => =~ != !~ : ; , @ ?";
+        let input = "( ) [ ] { } | . .. + - * / % < <= <| <> > >= = == => =~ != !~ : ; , @ ?";
         let options = ParseOptions::new(false);
         let tokens = parse_tokens(input, &options);
         let expected_kinds = vec![
@@ -939,8 +927,7 @@ mod tests {
     #[test]
     fn test_real_literal() {
         let possible_inputs = vec![
-            "1.0", "1.0e10", "1.0E10", "1.0e-10", "1.0E-10", "1.0e+10", "1.0E+10",
-            "1.e-5", "1.E-5",
+            "1.0", "1.0e10", "1.0E10", "1.0e-10", "1.0E-10", "1.0e+10", "1.0E+10", "1.e-5", "1.E-5",
         ];
 
         for input in possible_inputs {
