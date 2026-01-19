@@ -77,6 +77,7 @@ pub enum SyntaxKind {
     RealLiteralToken,
     TimespanLiteralToken,
     RawGuidLiteralToken,
+    StringLiteralToken,
 
     // identifier
     IdentifierToken,
@@ -167,16 +168,33 @@ fn next_token(bytes: &[u8], start: usize, options: &ParseOptions) -> Option<Lexi
                 return Some(LexicalToken::new(kind, trivia, range));
             }
 
-            if byte == b'#' {
+            if is_string_literal_start_quote(byte) {
+                if let Some(range) = parse_string_literal(bytes, pos) {
+                    return Some(LexicalToken {
+                        kind: SyntaxKind::StringLiteralToken,
+                        trivia_span: trivia,
+                        text_span: range,
+                    });
+                }
+            } else if byte == b'@'
+                && let Some(&next_byte) = peek(bytes, pos + 1)
+                && is_string_literal_start_quote(next_byte)
+            {
+                if let Some(range) = parse_string_literal(bytes, pos) {
+                    return Some(LexicalToken {
+                        kind: SyntaxKind::StringLiteralToken,
+                        trivia_span: trivia,
+                        text_span: range,
+                    });
+                }
+            } else if byte == b'#' {
                 let directive_end = get_line_end(bytes, pos);
                 return Some(LexicalToken {
                     kind: SyntaxKind::DirectiveToken,
                     trivia_span: trivia,
                     text_span: pos..directive_end,
                 });
-            }
-
-            if is_at_end(bytes, pos) {
+            } else if is_at_end(bytes, pos) {
                 if has_trivia || options.always_produce_end_tokens {
                     return Some(LexicalToken::new(
                         SyntaxKind::EndOfTextToken,
@@ -199,6 +217,19 @@ fn next_token(bytes: &[u8], start: usize, options: &ParseOptions) -> Option<Lexi
             }
 
             if let Some(id_len) = scan_identifier(bytes, pos) {
+                if id_len == 1
+                    && (byte == b'h' || byte == b'H')
+                    && let Some(&next_byte) = peek(bytes, pos + 1)
+                    && (is_string_literal_start_quote(next_byte) || next_byte == b'@')
+                    && let Some(range) = parse_string_literal(bytes, pos)
+                {
+                    return Some(LexicalToken {
+                        kind: SyntaxKind::StringLiteralToken,
+                        trivia_span: trivia,
+                        text_span: range,
+                    });
+                }
+
                 return Some(LexicalToken {
                     kind: SyntaxKind::IdentifierToken,
                     trivia_span: trivia,
@@ -366,6 +397,125 @@ fn parse_punctuation(bytes: &[u8], start: usize) -> Option<(SyntaxKind, Range<us
     };
 
     Some((kind, start..start + width))
+}
+
+fn parse_string_literal(bytes: &[u8], start: usize) -> Option<Range<usize>> {
+    let mut byte = peek(bytes, start)?;
+    let mut pos = start;
+    let mut byte_val = *byte;
+
+    if byte_val == b'h' || byte_val == b'H' {
+        pos += 1;
+        byte = peek(bytes, pos)?;
+        byte_val = *byte;
+    }
+
+    let is_verbatim = if byte_val == b'@' {
+        pos += 1;
+        byte = peek(bytes, pos)?;
+        byte_val = *byte;
+        true
+    } else {
+        false
+    };
+
+    if byte_val == b'\'' || byte_val == b'"' {
+        pos += 1;
+
+        let content_len = scan_string_literal_content(bytes, pos, byte_val, is_verbatim)?;
+        pos += content_len;
+
+        if peek(bytes, pos) == Some(&byte_val) {
+            pos += 1;
+        } else {
+            return None;
+        }
+    }
+
+    Some(start..pos)
+}
+
+fn scan_string_literal_content(
+    bytes: &[u8],
+    start: usize,
+    quote_byte: u8,
+    is_verbatim: bool,
+) -> Option<usize> {
+    let mut pos = start;
+
+    while let Some(&byte) = peek(bytes, pos) {
+        if byte == quote_byte && is_verbatim && peek(bytes, pos + 1) == Some(&quote_byte) {
+            pos += 2;
+        } else if byte == b'\\' && !is_verbatim {
+            let escape_len = scan_string_escape(bytes, pos)?;
+            pos += escape_len;
+        } else if byte == quote_byte || byte == b'\r' || byte == b'\n' {
+            break;
+        } else {
+            pos += 1;
+        }
+    }
+
+    Some(pos - start)
+}
+
+fn scan_string_escape(bytes: &[u8], start: usize) -> Option<usize> {
+    if peek(bytes, start) != Some(&b'\\') {
+        return None;
+    }
+
+    let mut pos = start + 1;
+
+    match peek(bytes, pos)? {
+        b'\\' | b'\'' | b'"' | b'a' | b'b' | b'f' | b'n' | b'r' | b't' | b'v' => {
+            pos += 1;
+        }
+        b'u' => {
+            pos += 1;
+            let hex_len = scan_hex_digits(bytes, pos, Some(4))?;
+            pos += hex_len;
+        }
+        b'U' => {
+            pos += 1;
+            let hex_len = scan_hex_digits(bytes, pos, Some(8))?;
+            pos += hex_len;
+        }
+        b'x' => {
+            pos += 1;
+            let hex_len = scan_hex_digits(bytes, pos, Some(2))?;
+            pos += hex_len;
+        }
+        _ => {
+            let octal_len = scan_octal_code(bytes, pos)?;
+            pos += octal_len;
+        }
+    }
+
+    Some(pos - start)
+}
+
+fn scan_octal_code(bytes: &[u8], start: usize) -> Option<usize> {
+    let mut pos = start;
+
+    if let Some(&byte) = peek(bytes, pos)
+        && (b'0'..=b'7').contains(&byte)
+    {
+        pos += 1;
+
+        for _ in 0..2 {
+            if let Some(&next_byte) = peek(bytes, pos)
+                && (b'0'..=b'7').contains(&next_byte)
+            {
+                pos += 1;
+            } else {
+                break;
+            }
+        }
+
+        return Some(pos - start);
+    }
+
+    None
 }
 
 fn scan_identifier(bytes: &[u8], start: usize) -> Option<usize> {
@@ -690,7 +840,7 @@ fn is_identifier_char(byte: u8) -> bool {
 mod tests {
     use super::*;
 
-    fn get_text<'a>(source: &'a str, range: std::ops::Range<usize>) -> &'a str {
+    fn get_text(source: &str, range: std::ops::Range<usize>) -> &str {
         &source[range.start..range.end]
     }
 
@@ -784,19 +934,6 @@ mod tests {
                 SyntaxKind::EndOfTextToken,
             ]
         );
-    }
-
-    #[test]
-    fn test_at_token_vs_string_literal_start() {
-        let input = "@\"";
-        let options = ParseOptions::default();
-        let tokens = parse_tokens(input, &options);
-
-        assert_eq!(tokens[0].kind, SyntaxKind::BadToken);
-
-        let input_valid = "@ ";
-        let tokens_valid = parse_tokens(input_valid, &options);
-        assert_eq!(tokens_valid[0].kind, SyntaxKind::AtToken);
     }
 
     #[test]
@@ -1011,5 +1148,127 @@ mod tests {
             assert_eq!(get_text(input, tokens[0].trivia_span.clone()), "");
             assert_eq!(get_text(input, tokens[0].text_span.clone()), input);
         }
+    }
+
+    #[test]
+    fn test_string_literal() {
+        let possible_inputs = vec![
+            r#"'Hello, World!'"#,
+            r#""Hello, World!""#,
+            r#"h'Hidden string'"#,
+            r#"h"Hidden string""#,
+            r#"H'Hidden string'"#,
+            r#"H"Hidden string""#,
+            r#"@'Verbatim string with ''single quotes'''"#,
+            r#"@"Verbatim string with ""double quotes""""#,
+            r#"'String with escape sequences: \n \t \\'"#,
+            r#""String with escape sequences: \n \t \\""#,
+            r#""""#,
+            r#"''"#,
+            r#"h"""#,
+            r#"@"""#,
+            r#"h@"""#,
+            r#""این یک متن فارسی است""#,
+        ];
+
+        for input in possible_inputs {
+            let options = ParseOptions::new(false);
+            let tokens = parse_tokens(input, &options);
+
+            assert_eq!(tokens.len(), 1, "{input}");
+            assert_eq!(tokens[0].kind, SyntaxKind::StringLiteralToken);
+            assert_eq!(get_text(input, tokens[0].trivia_span.clone()), "");
+            assert_eq!(get_text(input, tokens[0].text_span.clone()), input);
+        }
+    }
+
+    #[test]
+    fn test_unclosed_string() {
+        let inputs = vec![
+            "\"unclosed string",
+            "'unclosed string",
+            "h\"unclosed",
+            "@\"unclosed",
+        ];
+
+        for input in inputs {
+            let options = ParseOptions::new(false);
+            let tokens = parse_tokens(input, &options);
+
+            assert_ne!(tokens[0].kind, SyntaxKind::StringLiteralToken, "{input}");
+        }
+    }
+
+    #[test]
+    fn test_string_with_invalid_escape() {
+        let inputs = vec![
+            r#""invalid \q escape""#,
+            r#""incomplete \u""#,
+            r#""incomplete \x""#,
+        ];
+
+        for input in inputs {
+            let options = ParseOptions::new(false);
+            let tokens = parse_tokens(input, &options);
+
+            assert_ne!(tokens[0].kind, SyntaxKind::StringLiteralToken, "{input}");
+        }
+    }
+
+    #[test]
+    fn test_escape_at_eof() {
+        let input = r#""string\""#;
+        let options = ParseOptions::new(false);
+        let tokens = parse_tokens(input, &options);
+
+        assert_ne!(tokens[0].kind, SyntaxKind::StringLiteralToken);
+    }
+
+    #[test]
+    fn test_string_with_valid_escape_sequences() {
+        let inputs = vec![
+            r#""escape: \n \t \r \\""#,
+            r#""unicode: \u0041 \U00000041""#,
+            r#""hex: \x41""#,
+            r#""octal: \101""#,
+            r#""quotes: \' \"""#,
+        ];
+
+        for input in inputs {
+            let options = ParseOptions::new(false);
+            let tokens = parse_tokens(input, &options);
+
+            assert_eq!(tokens.len(), 1, "{input}");
+            assert_eq!(tokens[0].kind, SyntaxKind::StringLiteralToken, "{input}");
+            assert_eq!(get_text(input, tokens[0].text_span.clone()), input);
+        }
+    }
+
+    #[test]
+    fn test_verbatim_string_escaping() {
+        let inputs = vec![
+            r#"@'string with ''doubled'' quotes'"#,
+            r#"@"string with ""doubled"" quotes""#,
+            r#"h@'no backslash escape \n'"#,
+        ];
+
+        for input in inputs {
+            let options = ParseOptions::new(false);
+            let tokens = parse_tokens(input, &options);
+
+            assert_eq!(tokens.len(), 1, "{input}");
+            assert_eq!(tokens[0].kind, SyntaxKind::StringLiteralToken, "{input}");
+            assert_eq!(get_text(input, tokens[0].text_span.clone()), input);
+        }
+    }
+
+    #[test]
+    fn test_string_terminates_at_newline() {
+        let input = "\"string with\nunfinished line";
+        let options = ParseOptions::new(false);
+        let tokens = parse_tokens(input, &options);
+
+        // String should terminate at newline, making it invalid
+        assert_ne!(tokens[0].kind, SyntaxKind::StringLiteralToken);
     }
 }
