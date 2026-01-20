@@ -9,8 +9,9 @@ mod tests;
 
 pub use parser::parse_tokens;
 
-const MULTI_LINE_STRING_SEQUENCES: &[&[u8]] = &[b"```", b"~~~"];
 const AVG_BYTES_PER_TOKEN: usize = 5;
+const MULTI_LINE_STRING_SEQUENCES: &[&[u8]] = &[b"```", b"~~~"];
+const BOOL_LITERALS: &[&[u8]] = &[b"true", b"false", b"True", b"False", b"TRUE", b"FALSE"];
 const TIMESPAN_SUFFIXES: &[&[u8]] = &[
     b"microseconds",
     b"milliseconds",
@@ -83,6 +84,7 @@ pub enum SyntaxKind {
     QuestionToken,
 
     // literal tokens
+    BooleanLiteralToken,
     LongLiteralToken,
     RealLiteralToken,
     TimespanLiteralToken,
