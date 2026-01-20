@@ -1,5 +1,6 @@
 use std::ops::Range;
 
+const MULTI_LINE_STRING_SEQUENCES: &[&[u8]] = &[b"```", b"~~~"];
 const AVG_BYTES_PER_TOKEN: usize = 5;
 const TIMESPAN_SUFFIXES: &[&[u8]] = &[
     b"microseconds",
@@ -430,6 +431,22 @@ fn parse_string_literal(bytes: &[u8], start: usize) -> Option<Range<usize>> {
         } else {
             return None;
         }
+    } else {
+        for sequence in MULTI_LINE_STRING_SEQUENCES {
+            if matches_sequence(bytes, start, sequence) {
+                pos += sequence.len();
+                pos += scan_multi_line_string_literal(bytes, pos, sequence);
+                if matches_sequence(bytes, pos, sequence) {
+                    pos += sequence.len();
+                } else {
+                    return None;
+                }
+
+                return Some(start..pos);
+            }
+        }
+
+        return None;
     }
 
     Some(start..pos)
@@ -516,6 +533,16 @@ fn scan_octal_code(bytes: &[u8], start: usize) -> Option<usize> {
     }
 
     None
+}
+
+fn scan_multi_line_string_literal(bytes: &[u8], start: usize, sequence: &[u8]) -> usize {
+    let mut pos = start;
+
+    while !is_at_end(bytes, pos) && !matches_sequence(bytes, pos, sequence) {
+        pos += 1;
+    }
+
+    pos - start
 }
 
 fn scan_identifier(bytes: &[u8], start: usize) -> Option<usize> {
@@ -823,7 +850,7 @@ fn is_line_break_start(byte: u8) -> bool {
 
 #[inline(always)]
 fn is_string_literal_start_quote(byte: u8) -> bool {
-    byte == b'"' || byte == b'\''
+    byte == b'"' || byte == b'\'' || byte == b'`' || byte == b'~'
 }
 
 #[inline(always)]
@@ -834,6 +861,10 @@ fn is_identifier_start_char(byte: u8) -> bool {
 #[inline(always)]
 fn is_identifier_char(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || byte == b'_'
+}
+
+fn matches_sequence(bytes: &[u8], start: usize, sequence: &[u8]) -> bool {
+    bytes.get(start..start + sequence.len()) == Some(sequence)
 }
 
 #[cfg(test)]
@@ -1169,6 +1200,17 @@ mod tests {
             r#"@"""#,
             r#"h@"""#,
             r#""این یک متن فارسی است""#,
+            r#"```  multi
+                    line
+                    string
+            ```"#,
+            r#"~~~
+                alternate
+                multi
+                line
+            ~~~"#,
+            r#"```single line```"#,
+            r#"~~~single~~~"#,
         ];
 
         for input in possible_inputs {
@@ -1189,6 +1231,8 @@ mod tests {
             "'unclosed string",
             "h\"unclosed",
             "@\"unclosed",
+            "```unclosed multi line",
+            "~~~unclosed alternate",
         ];
 
         for input in inputs {
