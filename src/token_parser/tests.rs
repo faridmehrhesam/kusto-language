@@ -445,3 +445,18 @@ fn test_string_terminates_at_newline() {
     // String should terminate at newline, making it invalid
     assert_ne!(tokens[0].kind, SyntaxKind::StringLiteralToken);
 }
+
+#[test]
+fn test_bool_literal() {
+    let possible_inputs = vec!["true", "false", "True", "False", "TRUE", "FALSE"];
+
+    for input in possible_inputs {
+        let options = ParseOptions::new(false);
+        let tokens = parse_tokens(input, &options);
+
+        assert_eq!(tokens.len(), 1, "{input}");
+        assert_eq!(tokens[0].kind, SyntaxKind::BooleanLiteralToken);
+        assert_eq!(get_text(input, tokens[0].trivia_span.clone()), "");
+        assert_eq!(get_text(input, tokens[0].text_span.clone()), input);
+    }
+}

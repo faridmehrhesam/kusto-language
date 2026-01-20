@@ -1,5 +1,6 @@
 use super::scanner::*;
 use super::utilities::*;
+use crate::token_parser::BOOL_LITERALS;
 use crate::token_parser::{AVG_BYTES_PER_TOKEN, LexicalToken, ParseOptions, SyntaxKind};
 use std::ops::Range;
 
@@ -75,6 +76,21 @@ fn next_token(bytes: &[u8], start: usize, options: &ParseOptions) -> Option<Lexi
         }
 
         if is_identifier_start_char(byte) {
+            if let Some(bool_len) = parse_bool_literal(bytes, pos) {
+                let is_bool = match peek(bytes, pos + bool_len) {
+                    Some(&b) => !is_identifier_char(b),
+                    None => true, // end-of-input is a valid boundary
+                };
+
+                if is_bool {
+                    return Some(LexicalToken {
+                        kind: SyntaxKind::BooleanLiteralToken,
+                        trivia_span: trivia,
+                        text_span: pos..pos + bool_len,
+                    });
+                }
+            }
+
             if let Some(raw_guid_len) = scan_raw_guid_literal(bytes, pos) {
                 return Some(LexicalToken {
                     kind: SyntaxKind::RawGuidLiteralToken,
@@ -181,6 +197,16 @@ fn parse_trivia(bytes: &[u8], start: usize) -> Option<Range<usize>> {
     }
 
     if pos == start { None } else { Some(start..pos) }
+}
+
+fn parse_bool_literal(bytes: &[u8], start: usize) -> Option<usize> {
+    for literal in BOOL_LITERALS {
+        if matches_sequence(bytes, start, literal) {
+            return Some(literal.len());
+        }
+    }
+
+    None
 }
 
 fn parse_punctuation(bytes: &[u8], start: usize) -> Option<(SyntaxKind, Range<usize>)> {

@@ -46,7 +46,7 @@ pub(crate) fn scan_identifier(bytes: &[u8], start: usize) -> Option<usize> {
     } else if let Some(digit_count) = scan_digits(bytes, pos)
         && let Some(next_byte) = peek(bytes, pos + digit_count)
     {
-        // must have at least one one letter or _ after digits
+        // must have at least one letter or _ after digits
         if next_byte.is_ascii_alphabetic() || *next_byte == b'_' {
             pos += digit_count;
             pos += count_while(bytes, pos, |&b| is_identifier_char(b));
