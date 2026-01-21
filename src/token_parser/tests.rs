@@ -31,7 +31,7 @@ fn test_single_punctuation() {
 #[test]
 fn test_multi_char_punctuation() {
     let input = "<= == => ..";
-    let options = ParseOptions::default();
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
     let tokens = parse_tokens(input, &options);
 
     assert_eq!(tokens[0].kind, SyntaxKind::LessThanOrEqualToken);
@@ -49,7 +49,7 @@ fn test_multi_char_punctuation() {
 #[test]
 fn test_trivia_and_comments() {
     let input = "  // this is a comment\n  +  ";
-    let options = ParseOptions::default();
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
     let tokens = parse_tokens(input, &options);
     let plus = &tokens[0];
 
@@ -69,7 +69,7 @@ fn test_trivia_and_comments() {
 #[test]
 fn test_bad_token() {
     let input = "این یک متن فارسی است"; // Non-ASCII
-    let options = ParseOptions::default();
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
     let tokens = parse_tokens(input, &options);
 
     assert_eq!(tokens[0].kind, SyntaxKind::BadToken);
@@ -99,7 +99,7 @@ fn test_complex_punctuation_chain() {
 #[test]
 fn test_options_no_end_tokens() {
     let input = "+";
-    let options = ParseOptions::new(false);
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
     let tokens = parse_tokens(input, &options);
 
     assert_eq!(tokens.len(), 1);
@@ -109,7 +109,9 @@ fn test_options_no_end_tokens() {
 #[test]
 fn test_all_possible_punctuations() {
     let input = "( ) [ ] { } | . .. + - * / % < <= <| <> > >= = == => =~ != !~ : ; , @ ?";
-    let options = ParseOptions::new(false);
+    let options = ParseOptions::default()
+        .with_always_produce_end_tokens(false)
+        .with_always_produce_end_tokens(false);
     let tokens = parse_tokens(input, &options);
     let expected_kinds = vec![
         SyntaxKind::OpenParenToken,
@@ -165,7 +167,7 @@ fn test_all_possible_punctuations() {
 #[test]
 fn test_directive() {
     let input = "#crp query_language=kql";
-    let options = ParseOptions::new(false);
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
     let tokens = parse_tokens(input, &options);
 
     assert_eq!(tokens.len(), 1);
@@ -175,7 +177,7 @@ fn test_directive() {
 #[test]
 fn test_directive_with_other_tokens() {
     let input = " + #crp query_language=kql\n +";
-    let options = ParseOptions::new(false);
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
     let tokens = parse_tokens(input, &options);
 
     assert_eq!(tokens.len(), 3);
@@ -192,7 +194,7 @@ fn test_identifier() {
     ];
 
     for input in possible_inputs {
-        let options = ParseOptions::new(false);
+        let options = ParseOptions::default().with_always_produce_end_tokens(false);
         let tokens = parse_tokens(input, &options);
 
         assert_eq!(tokens.len(), 1, "{input}");
@@ -211,7 +213,7 @@ fn test_raw_guid_literal() {
     ];
 
     for input in possible_inputs {
-        let options = ParseOptions::new(false);
+        let options = ParseOptions::default().with_always_produce_end_tokens(false);
         let tokens = parse_tokens(input, &options);
 
         assert_eq!(tokens.len(), 1, "{input}");
@@ -229,7 +231,7 @@ fn test_real_literal() {
     ];
 
     for input in possible_inputs {
-        let options = ParseOptions::new(false);
+        let options = ParseOptions::default().with_always_produce_end_tokens(false);
         let tokens = parse_tokens(input, &options);
 
         assert_eq!(tokens.len(), 1, "{input}");
@@ -280,7 +282,7 @@ fn test_timespan_literal() {
     ];
 
     for input in possible_inputs {
-        let options = ParseOptions::new(false);
+        let options = ParseOptions::default().with_always_produce_end_tokens(false);
         let tokens = parse_tokens(input, &options);
 
         assert_eq!(tokens.len(), 1, "{input}");
@@ -301,7 +303,7 @@ fn test_long_literal() {
     ];
 
     for input in possible_inputs {
-        let options = ParseOptions::new(false);
+        let options = ParseOptions::default().with_always_produce_end_tokens(false);
         let tokens = parse_tokens(input, &options);
 
         assert_eq!(tokens.len(), 1, "{input}");
@@ -344,7 +346,7 @@ fn test_string_literal() {
     ];
 
     for input in possible_inputs {
-        let options = ParseOptions::new(false);
+        let options = ParseOptions::default().with_always_produce_end_tokens(false);
         let tokens = parse_tokens(input, &options);
 
         assert_eq!(tokens.len(), 1, "{input}");
@@ -366,7 +368,7 @@ fn test_unclosed_string() {
     ];
 
     for input in inputs {
-        let options = ParseOptions::new(false);
+        let options = ParseOptions::default().with_always_produce_end_tokens(false);
         let tokens = parse_tokens(input, &options);
 
         assert_ne!(tokens[0].kind, SyntaxKind::StringLiteralToken, "{input}");
@@ -382,7 +384,7 @@ fn test_string_with_invalid_escape() {
     ];
 
     for input in inputs {
-        let options = ParseOptions::new(false);
+        let options = ParseOptions::default().with_always_produce_end_tokens(false);
         let tokens = parse_tokens(input, &options);
 
         assert_ne!(tokens[0].kind, SyntaxKind::StringLiteralToken, "{input}");
@@ -392,7 +394,7 @@ fn test_string_with_invalid_escape() {
 #[test]
 fn test_escape_at_eof() {
     let input = r#""string\""#;
-    let options = ParseOptions::new(false);
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
     let tokens = parse_tokens(input, &options);
 
     assert_ne!(tokens[0].kind, SyntaxKind::StringLiteralToken);
@@ -409,7 +411,7 @@ fn test_string_with_valid_escape_sequences() {
     ];
 
     for input in inputs {
-        let options = ParseOptions::new(false);
+        let options = ParseOptions::default().with_always_produce_end_tokens(false);
         let tokens = parse_tokens(input, &options);
 
         assert_eq!(tokens.len(), 1, "{input}");
@@ -427,7 +429,7 @@ fn test_verbatim_string_escaping() {
     ];
 
     for input in inputs {
-        let options = ParseOptions::new(false);
+        let options = ParseOptions::default().with_always_produce_end_tokens(false);
         let tokens = parse_tokens(input, &options);
 
         assert_eq!(tokens.len(), 1, "{input}");
@@ -439,7 +441,7 @@ fn test_verbatim_string_escaping() {
 #[test]
 fn test_string_terminates_at_newline() {
     let input = "\"string with\nunfinished line";
-    let options = ParseOptions::new(false);
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
     let tokens = parse_tokens(input, &options);
 
     // String should terminate at newline, making it invalid
@@ -451,12 +453,410 @@ fn test_bool_literal() {
     let possible_inputs = vec!["true", "false", "True", "False", "TRUE", "FALSE"];
 
     for input in possible_inputs {
-        let options = ParseOptions::new(false);
+        let options = ParseOptions::default().with_always_produce_end_tokens(false);
         let tokens = parse_tokens(input, &options);
 
         assert_eq!(tokens.len(), 1, "{input}");
         assert_eq!(tokens[0].kind, SyntaxKind::BooleanLiteralToken);
         assert_eq!(get_text(input, tokens[0].trivia_span.clone()), "");
         assert_eq!(get_text(input, tokens[0].text_span.clone()), input);
+    }
+}
+
+// ============ Keyword Recognition Tests ============
+
+#[test]
+fn test_simple_keywords() {
+    let test_cases = vec![
+        ("let", SyntaxKind::LetKeyword),
+        ("in", SyntaxKind::InKeyword),
+        ("and", SyntaxKind::AndKeyword),
+        ("or", SyntaxKind::OrKeyword),
+        ("where", SyntaxKind::WhereKeyword),
+        ("extend", SyntaxKind::ExtendKeyword),
+        ("project", SyntaxKind::ProjectKeyword),
+        ("summarize", SyntaxKind::SummarizeKeyword),
+        ("join", SyntaxKind::JoinKeyword),
+        ("union", SyntaxKind::UnionKeyword),
+    ];
+
+    for (input, expected_kind) in test_cases {
+        let options = ParseOptions::default().with_always_produce_end_tokens(false);
+        let tokens = parse_tokens(input, &options);
+
+        assert_eq!(tokens.len(), 1, "Failed for keyword: {input}");
+        assert_eq!(
+            tokens[0].kind, expected_kind,
+            "Wrong kind for keyword: {input}"
+        );
+        assert_eq!(get_text(input, tokens[0].text_span.clone()), input);
+    }
+}
+
+#[test]
+fn test_type_keywords() {
+    let test_cases = vec![
+        ("int", SyntaxKind::IntKeyword),
+        ("long", SyntaxKind::LongKeyword),
+        ("real", SyntaxKind::RealKeyword),
+        ("string", SyntaxKind::StringKeyword),
+        ("bool", SyntaxKind::BoolKeyword),
+        ("datetime", SyntaxKind::DateTimeKeyword),
+        ("timespan", SyntaxKind::TimespanKeyword),
+        ("decimal", SyntaxKind::DecimalKeyword),
+        ("dynamic", SyntaxKind::DynamicKeyword),
+        ("guid", SyntaxKind::GuidKeyword),
+    ];
+
+    for (input, expected_kind) in test_cases {
+        let options = ParseOptions::default().with_always_produce_end_tokens(false);
+        let tokens = parse_tokens(input, &options);
+
+        assert_eq!(tokens.len(), 1, "Failed for type keyword: {input}");
+        assert_eq!(
+            tokens[0].kind, expected_kind,
+            "Wrong kind for type keyword: {input}"
+        );
+    }
+}
+
+#[test]
+fn test_long_keywords() {
+    let test_cases = vec![
+        (
+            "storedqueryresultcontainers",
+            SyntaxKind::StoredQueryResultContainersKeyword,
+        ),
+        (
+            "materialized-view-combine",
+            SyntaxKind::MaterializedViewCombineKeyword,
+        ),
+        (
+            "restricted_view_access",
+            SyntaxKind::RestrictedViewAccessKeyword,
+        ),
+        (
+            "graph-mark-components",
+            SyntaxKind::GraphMarkComponentsKeyword,
+        ),
+    ];
+
+    for (input, expected_kind) in test_cases {
+        let options = ParseOptions::default().with_always_produce_end_tokens(false);
+        let tokens = parse_tokens(input, &options);
+
+        assert_eq!(tokens.len(), 1, "Failed for keyword: {input}");
+        assert_eq!(
+            tokens[0].kind, expected_kind,
+            "Wrong kind for keyword: {input}"
+        );
+        assert_eq!(get_text(input, tokens[0].text_span.clone()), input);
+    }
+}
+
+#[test]
+fn test_keyword_with_special_chars() {
+    let test_cases = vec![
+        ("!in", SyntaxKind::NotInKeyword),
+        ("!has", SyntaxKind::NotHasKeyword),
+        ("!contains", SyntaxKind::NotBangContainsKeyword),
+        ("!startswith", SyntaxKind::NotStartsWithKeyword),
+        ("in~", SyntaxKind::InCsKeyword),
+        ("has_any", SyntaxKind::HasAnyKeyword),
+        ("contains_cs", SyntaxKind::ContainsCsKeyword2),
+    ];
+
+    for (input, expected_kind) in test_cases {
+        let options = ParseOptions::default().with_always_produce_end_tokens(false);
+        let tokens = parse_tokens(input, &options);
+
+        assert_eq!(tokens.len(), 1, "Failed for keyword: {input}");
+        assert_eq!(
+            tokens[0].kind, expected_kind,
+            "Wrong kind for keyword: {input}"
+        );
+    }
+}
+
+#[test]
+fn test_keyword_boundary_detection() {
+    // Keywords should not match if followed by identifier characters
+    let test_cases = vec![
+        ("letx", SyntaxKind::IdentifierToken),
+        ("where_col", SyntaxKind::IdentifierToken),
+        ("int32", SyntaxKind::Int32Keyword), // This is actually a different keyword
+        ("datetime2", SyntaxKind::IdentifierToken),
+    ];
+
+    for (input, expected_kind) in test_cases {
+        let options = ParseOptions::default().with_always_produce_end_tokens(false);
+        let tokens = parse_tokens(input, &options);
+
+        assert_eq!(tokens.len(), 1, "Failed for input: {input}");
+        assert_eq!(
+            tokens[0].kind, expected_kind,
+            "Wrong kind for input: {input}"
+        );
+    }
+}
+
+#[test]
+fn test_keyword_followed_by_punctuation() {
+    let input = "let x = 5";
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
+    let tokens = parse_tokens(input, &options);
+
+    assert_eq!(tokens[0].kind, SyntaxKind::LetKeyword);
+    assert_eq!(tokens[1].kind, SyntaxKind::IdentifierToken);
+    assert_eq!(tokens[2].kind, SyntaxKind::EqualToken);
+    assert_eq!(tokens[3].kind, SyntaxKind::LongLiteralToken);
+}
+
+#[test]
+fn test_longest_keyword_match() {
+    // Test that longer keywords are matched before shorter ones
+    let test_cases = vec![
+        ("in", SyntaxKind::InKeyword),
+        ("in~", SyntaxKind::InCsKeyword),
+        ("has", SyntaxKind::HasKeyword),
+        ("has_any", SyntaxKind::HasAnyKeyword),
+        ("has_all", SyntaxKind::HasAllKeyword),
+        ("contains", SyntaxKind::ContainsKeyword),
+        ("contains_cs", SyntaxKind::ContainsCsKeyword2),
+    ];
+
+    for (input, expected_kind) in test_cases {
+        let options = ParseOptions::default().with_always_produce_end_tokens(false);
+        let tokens = parse_tokens(input, &options);
+
+        assert_eq!(tokens.len(), 1, "Failed for input: {input}");
+        assert_eq!(
+            tokens[0].kind, expected_kind,
+            "Wrong kind for input: {input}"
+        );
+        assert_eq!(get_text(input, tokens[0].text_span.clone()), input);
+    }
+}
+
+// ============ Goo Literal Tests ============
+
+#[test]
+fn test_goo_int_literal() {
+    let input = "int(42)";
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
+    let tokens = parse_tokens(input, &options);
+
+    assert_eq!(tokens.len(), 1);
+    assert_eq!(tokens[0].kind, SyntaxKind::IntLiteralToken);
+    assert_eq!(get_text(input, tokens[0].text_span.clone()), "int(42)");
+}
+
+#[test]
+fn test_goo_long_literal() {
+    let input = "long(123456789)";
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
+    let tokens = parse_tokens(input, &options);
+
+    assert_eq!(tokens.len(), 1);
+    assert_eq!(tokens[0].kind, SyntaxKind::LongLiteralToken);
+    assert_eq!(
+        get_text(input, tokens[0].text_span.clone()),
+        "long(123456789)"
+    );
+}
+
+#[test]
+fn test_goo_datetime_literal() {
+    let input = "datetime(2024-01-01T12:00:00Z)";
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
+    let tokens = parse_tokens(input, &options);
+
+    assert_eq!(tokens.len(), 1);
+    assert_eq!(tokens[0].kind, SyntaxKind::DateTimeLiteralToken);
+    assert_eq!(
+        get_text(input, tokens[0].text_span.clone()),
+        "datetime(2024-01-01T12:00:00Z)"
+    );
+}
+
+#[test]
+fn test_goo_timespan_literal() {
+    let input = "timespan(1d)";
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
+    let tokens = parse_tokens(input, &options);
+
+    assert_eq!(tokens.len(), 1);
+    assert_eq!(tokens[0].kind, SyntaxKind::TimespanLiteralToken);
+    assert_eq!(get_text(input, tokens[0].text_span.clone()), "timespan(1d)");
+}
+
+#[test]
+fn test_goo_real_literal() {
+    let input = "real(3.14159)";
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
+    let tokens = parse_tokens(input, &options);
+
+    assert_eq!(tokens.len(), 1);
+    assert_eq!(tokens[0].kind, SyntaxKind::RealLiteralToken);
+    assert_eq!(
+        get_text(input, tokens[0].text_span.clone()),
+        "real(3.14159)"
+    );
+}
+
+#[test]
+fn test_goo_decimal_literal() {
+    let input = "decimal(99.99)";
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
+    let tokens = parse_tokens(input, &options);
+
+    assert_eq!(tokens.len(), 1);
+    assert_eq!(tokens[0].kind, SyntaxKind::DecimalLiteralToken);
+    assert_eq!(
+        get_text(input, tokens[0].text_span.clone()),
+        "decimal(99.99)"
+    );
+}
+
+#[test]
+fn test_goo_guid_literal() {
+    let input = "guid(12345678-1234-1234-1234-123456789012)";
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
+    let tokens = parse_tokens(input, &options);
+
+    assert_eq!(tokens.len(), 1);
+    assert_eq!(tokens[0].kind, SyntaxKind::GuidLiteralToken);
+    assert_eq!(
+        get_text(input, tokens[0].text_span.clone()),
+        "guid(12345678-1234-1234-1234-123456789012)"
+    );
+}
+
+#[test]
+fn test_goo_bool_literal() {
+    let input = "bool(true)";
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
+    let tokens = parse_tokens(input, &options);
+
+    assert_eq!(tokens.len(), 1);
+    assert_eq!(tokens[0].kind, SyntaxKind::BooleanLiteralToken);
+    assert_eq!(get_text(input, tokens[0].text_span.clone()), "bool(true)");
+}
+
+#[test]
+fn test_goo_with_whitespace() {
+    let input = "int( 42 )";
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
+    let tokens = parse_tokens(input, &options);
+
+    assert_eq!(tokens.len(), 1);
+    assert_eq!(tokens[0].kind, SyntaxKind::IntLiteralToken);
+    assert_eq!(get_text(input, tokens[0].text_span.clone()), "int( 42 )");
+}
+
+#[test]
+fn test_goo_unclosed_paren() {
+    let input = "int(42";
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
+    let tokens = parse_tokens(input, &options);
+
+    // Should parse as keyword followed by open paren and number
+    assert!(tokens.len() > 1);
+    assert_eq!(tokens[0].kind, SyntaxKind::IntKeyword);
+}
+
+#[test]
+fn test_goo_with_line_breaks_not_allowed() {
+    let input = "int(\n42\n)";
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
+    let tokens = parse_tokens(input, &options);
+
+    // Should not parse as goo literal when line breaks not allowed
+    assert!(tokens.len() > 1);
+    assert_eq!(tokens[0].kind, SyntaxKind::IntKeyword);
+}
+
+#[test]
+fn test_goo_with_line_breaks_allowed() {
+    let input = "int(\n42\n)";
+    let options = ParseOptions::default()
+        .with_always_produce_end_tokens(false)
+        .with_allow_literals_with_line_breaks(true);
+    let tokens = parse_tokens(input, &options);
+
+    // Should parse as goo literal when line breaks allowed
+    assert_eq!(tokens.len(), 1);
+    assert_eq!(tokens[0].kind, SyntaxKind::IntLiteralToken);
+    assert_eq!(get_text(input, tokens[0].text_span.clone()), "int(\n42\n)");
+}
+
+#[test]
+fn test_type_keyword_not_followed_by_paren() {
+    let input = "int + 5";
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
+    let tokens = parse_tokens(input, &options);
+
+    assert_eq!(tokens[0].kind, SyntaxKind::IntKeyword);
+    assert_eq!(tokens[1].kind, SyntaxKind::PlusToken);
+    assert_eq!(tokens[2].kind, SyntaxKind::LongLiteralToken);
+}
+
+#[test]
+fn test_date_keyword_goo() {
+    // date() should also create datetime literal
+    let input = "date(2024-01-01)";
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
+    let tokens = parse_tokens(input, &options);
+
+    assert_eq!(tokens.len(), 1);
+    assert_eq!(tokens[0].kind, SyntaxKind::DateTimeLiteralToken);
+}
+
+#[test]
+fn test_time_keyword_goo() {
+    // time() should create timespan literal
+    let input = "time(1h)";
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
+    let tokens = parse_tokens(input, &options);
+
+    assert_eq!(tokens.len(), 1);
+    assert_eq!(tokens[0].kind, SyntaxKind::TimespanLiteralToken);
+}
+
+#[test]
+fn test_complex_query_with_keywords() {
+    let input = "let x = 5; T | where x > 10 | project col1, col2 | summarize count()";
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
+    let tokens = parse_tokens(input, &options);
+
+    // Verify key tokens are present
+    assert_eq!(tokens[0].kind, SyntaxKind::LetKeyword);
+    assert!(tokens.iter().any(|t| t.kind == SyntaxKind::WhereKeyword));
+    assert!(tokens.iter().any(|t| t.kind == SyntaxKind::ProjectKeyword));
+    assert!(
+        tokens
+            .iter()
+            .any(|t| t.kind == SyntaxKind::SummarizeKeyword)
+    );
+}
+
+#[test]
+fn test_hint_keywords() {
+    let test_cases = vec![
+        ("hint.remote", SyntaxKind::HintDotRemoteKeyword),
+        ("hint.spread", SyntaxKind::HintDotSpreadKeyword),
+        ("hint.strategy", SyntaxKind::HintDotStrategyKeyword),
+        ("hint.concurrency", SyntaxKind::HintDotConcurrencyKeyword),
+    ];
+
+    for (input, expected_kind) in test_cases {
+        let options = ParseOptions::default().with_always_produce_end_tokens(false);
+        let tokens = parse_tokens(input, &options);
+
+        assert_eq!(tokens.len(), 1, "Failed for hint keyword: {input}");
+        assert_eq!(
+            tokens[0].kind, expected_kind,
+            "Wrong kind for hint keyword: {input}"
+        );
     }
 }

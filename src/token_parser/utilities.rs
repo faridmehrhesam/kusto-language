@@ -1,3 +1,5 @@
+use crate::token_parser::{KEYWORDS, SyntaxKind, TIMESPAN_SUFFIXES};
+
 #[inline(always)]
 pub(crate) fn peek(bytes: &[u8], pos: usize) -> Option<&u8> {
     bytes.get(pos)
@@ -56,6 +58,48 @@ pub(crate) fn get_next_line_start(bytes: &[u8], start: usize) -> Option<usize> {
 
 pub(crate) fn get_line_end(bytes: &[u8], start: usize) -> usize {
     start + get_line_len(bytes, start, false)
+}
+
+pub(crate) fn get_timespan_longest_suffix(bytes: &[u8], start: usize) -> Option<usize> {
+    for suffix in TIMESPAN_SUFFIXES {
+        let len = suffix.len();
+        if bytes.get(start..start + len) == Some(*suffix) {
+            return Some(len);
+        }
+    }
+
+    None
+}
+
+pub(crate) fn get_longest_keyword(bytes: &[u8], start: usize) -> Option<(usize, SyntaxKind)> {
+    for keyword in KEYWORDS {
+        let len = keyword.0.len();
+        if bytes.get(start..start + len) == Some(keyword.0) {
+            return Some((len, keyword.1));
+        }
+    }
+
+    None
+}
+
+pub(crate) fn get_goo_literal_kind_from_keyword_kind(
+    keyword_kind: SyntaxKind,
+) -> Option<SyntaxKind> {
+    match keyword_kind {
+        SyntaxKind::BoolKeyword => Some(SyntaxKind::BooleanLiteralToken),
+        SyntaxKind::DateTimeKeyword | SyntaxKind::DateKeyword => {
+            Some(SyntaxKind::DateTimeLiteralToken)
+        }
+        SyntaxKind::DecimalKeyword => Some(SyntaxKind::DecimalLiteralToken),
+        SyntaxKind::GuidKeyword => Some(SyntaxKind::GuidLiteralToken),
+        SyntaxKind::IntKeyword | SyntaxKind::Int32Keyword => Some(SyntaxKind::IntLiteralToken),
+        SyntaxKind::LongKeyword | SyntaxKind::Int64Keyword => Some(SyntaxKind::LongLiteralToken),
+        SyntaxKind::RealKeyword | SyntaxKind::DoubleKeyword => Some(SyntaxKind::RealLiteralToken),
+        SyntaxKind::TimeKeyword | SyntaxKind::TimespanKeyword => {
+            Some(SyntaxKind::TimespanLiteralToken)
+        }
+        _ => None,
+    }
 }
 
 fn get_line_len(bytes: &[u8], start: usize, include_line_break: bool) -> usize {
