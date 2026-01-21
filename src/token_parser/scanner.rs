@@ -1,5 +1,29 @@
+use crate::token_parser::ParseOptions;
+
 use super::utilities::*;
-use crate::token_parser::TIMESPAN_SUFFIXES;
+
+pub(crate) fn scan_goo(bytes: &[u8], start: usize, options: &ParseOptions) -> Option<usize> {
+    let byte = *peek(bytes, start)?;
+    let mut pos = start;
+
+    if byte == b'(' {
+        pos += 1;
+
+        while let Some(&next_byte) = peek(bytes, pos)
+            && next_byte != b')'
+            && (options.allow_literals_with_line_breaks || !is_line_break_start(next_byte))
+        {
+            pos += 1;
+        }
+
+        if peek(bytes, pos) == Some(&b')') {
+            pos += 1;
+            return Some(pos - start);
+        }
+    }
+
+    None
+}
 
 pub(crate) fn scan_string_literal_content(
     bytes: &[u8],
@@ -309,15 +333,4 @@ fn scan_hex_integer_literal(bytes: &[u8], start: usize) -> Option<usize> {
     }
 
     Some(pos - start)
-}
-
-fn get_timespan_longest_suffix(bytes: &[u8], start: usize) -> Option<usize> {
-    for suffix in TIMESPAN_SUFFIXES {
-        let len = suffix.len();
-        if bytes.get(start..start + len) == Some(*suffix) {
-            return Some(len);
-        }
-    }
-
-    None
 }
