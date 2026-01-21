@@ -75,20 +75,20 @@ fn next_token(bytes: &[u8], start: usize, options: &ParseOptions) -> Option<Lexi
             }
         }
 
-        if let Some((keywork_len, keyword_kind)) = get_longest_keyword(bytes, pos) {
-            if let Some(&next_byte) = peek(bytes, pos + keywork_len)
+        if let Some((keyword_len, keyword_kind)) = get_longest_keyword(bytes, pos) {
+            if let Some(&next_byte) = peek(bytes, pos + keyword_len)
                 && next_byte == b'('
                 && let Some(goo_kind) = get_goo_literal_kind_from_keyword_kind(keyword_kind)
-                && let Some(goo_len) = scan_goo(bytes, pos + keywork_len, options)
+                && let Some(goo_len) = scan_goo(bytes, pos + keyword_len, options)
             {
                 return Some(LexicalToken {
                     kind: goo_kind,
                     trivia_span: trivia,
-                    text_span: pos..pos + keywork_len + goo_len,
+                    text_span: pos..pos + keyword_len + goo_len,
                 });
             }
 
-            let is_keyword = match peek(bytes, pos + keywork_len) {
+            let is_keyword = match peek(bytes, pos + keyword_len) {
                 Some(&next_byte) => !is_identifier_char(next_byte),
                 None => true,
             };
@@ -97,7 +97,7 @@ fn next_token(bytes: &[u8], start: usize, options: &ParseOptions) -> Option<Lexi
                 return Some(LexicalToken {
                     kind: keyword_kind,
                     trivia_span: trivia,
-                    text_span: pos..pos + keywork_len,
+                    text_span: pos..pos + keyword_len,
                 });
             }
         }

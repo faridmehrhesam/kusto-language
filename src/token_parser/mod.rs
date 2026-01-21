@@ -363,8 +363,6 @@ const KEYWORDS: &[(&[u8], SyntaxKind)] = &[
 
 #[derive(Debug, PartialEq, Clone, Copy, Eq)]
 pub enum SyntaxKind {
-    None = 0,
-
     // keywords
     __CrossClusterKeyword,
     __CrossDBKeyword,
@@ -737,7 +735,7 @@ pub struct ParseOptions {
 impl Default for ParseOptions {
     fn default() -> Self {
         Self {
-            always_produce_end_tokens: false,
+            always_produce_end_tokens: true,
             allow_literals_with_line_breaks: false,
         }
     }

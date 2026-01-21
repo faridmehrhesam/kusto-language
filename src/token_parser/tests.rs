@@ -7,7 +7,7 @@ fn get_text(source: &str, range: std::ops::Range<usize>) -> &str {
 #[test]
 fn test_empty_string() {
     let input = "";
-    let options = ParseOptions::default().with_always_produce_end_tokens(true);
+    let options = ParseOptions::default();
     let tokens = parse_tokens(input, &options);
 
     assert_eq!(tokens.len(), 1);
@@ -18,7 +18,7 @@ fn test_empty_string() {
 #[test]
 fn test_single_punctuation() {
     let input = "+";
-    let options = ParseOptions::default().with_always_produce_end_tokens(true);
+    let options = ParseOptions::default();
     let tokens = parse_tokens(input, &options);
 
     // Expect: [+] [EOF]
@@ -31,7 +31,7 @@ fn test_single_punctuation() {
 #[test]
 fn test_multi_char_punctuation() {
     let input = "<= == => ..";
-    let options = ParseOptions::default();
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
     let tokens = parse_tokens(input, &options);
 
     assert_eq!(tokens[0].kind, SyntaxKind::LessThanOrEqualToken);
@@ -49,7 +49,7 @@ fn test_multi_char_punctuation() {
 #[test]
 fn test_trivia_and_comments() {
     let input = "  // this is a comment\n  +  ";
-    let options = ParseOptions::default();
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
     let tokens = parse_tokens(input, &options);
     let plus = &tokens[0];
 
@@ -69,7 +69,7 @@ fn test_trivia_and_comments() {
 #[test]
 fn test_bad_token() {
     let input = "این یک متن فارسی است"; // Non-ASCII
-    let options = ParseOptions::default();
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
     let tokens = parse_tokens(input, &options);
 
     assert_eq!(tokens[0].kind, SyntaxKind::BadToken);
@@ -79,7 +79,7 @@ fn test_bad_token() {
 #[test]
 fn test_complex_punctuation_chain() {
     let input = "!=!~<|<?";
-    let options = ParseOptions::default().with_always_produce_end_tokens(true);
+    let options = ParseOptions::default();
     let tokens = parse_tokens(input, &options);
 
     let kinds: Vec<SyntaxKind> = tokens.iter().map(|t| t.kind).collect();
@@ -99,7 +99,7 @@ fn test_complex_punctuation_chain() {
 #[test]
 fn test_options_no_end_tokens() {
     let input = "+";
-    let options = ParseOptions::default();
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
     let tokens = parse_tokens(input, &options);
 
     assert_eq!(tokens.len(), 1);
@@ -109,7 +109,9 @@ fn test_options_no_end_tokens() {
 #[test]
 fn test_all_possible_punctuations() {
     let input = "( ) [ ] { } | . .. + - * / % < <= <| <> > >= = == => =~ != !~ : ; , @ ?";
-    let options = ParseOptions::default();
+    let options = ParseOptions::default()
+        .with_always_produce_end_tokens(false)
+        .with_always_produce_end_tokens(false);
     let tokens = parse_tokens(input, &options);
     let expected_kinds = vec![
         SyntaxKind::OpenParenToken,
@@ -165,7 +167,7 @@ fn test_all_possible_punctuations() {
 #[test]
 fn test_directive() {
     let input = "#crp query_language=kql";
-    let options = ParseOptions::default();
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
     let tokens = parse_tokens(input, &options);
 
     assert_eq!(tokens.len(), 1);
@@ -175,7 +177,7 @@ fn test_directive() {
 #[test]
 fn test_directive_with_other_tokens() {
     let input = " + #crp query_language=kql\n +";
-    let options = ParseOptions::default();
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
     let tokens = parse_tokens(input, &options);
 
     assert_eq!(tokens.len(), 3);
@@ -192,7 +194,7 @@ fn test_identifier() {
     ];
 
     for input in possible_inputs {
-        let options = ParseOptions::default();
+        let options = ParseOptions::default().with_always_produce_end_tokens(false);
         let tokens = parse_tokens(input, &options);
 
         assert_eq!(tokens.len(), 1, "{input}");
@@ -211,7 +213,7 @@ fn test_raw_guid_literal() {
     ];
 
     for input in possible_inputs {
-        let options = ParseOptions::default();
+        let options = ParseOptions::default().with_always_produce_end_tokens(false);
         let tokens = parse_tokens(input, &options);
 
         assert_eq!(tokens.len(), 1, "{input}");
@@ -229,7 +231,7 @@ fn test_real_literal() {
     ];
 
     for input in possible_inputs {
-        let options = ParseOptions::default();
+        let options = ParseOptions::default().with_always_produce_end_tokens(false);
         let tokens = parse_tokens(input, &options);
 
         assert_eq!(tokens.len(), 1, "{input}");
@@ -280,7 +282,7 @@ fn test_timespan_literal() {
     ];
 
     for input in possible_inputs {
-        let options = ParseOptions::default();
+        let options = ParseOptions::default().with_always_produce_end_tokens(false);
         let tokens = parse_tokens(input, &options);
 
         assert_eq!(tokens.len(), 1, "{input}");
@@ -301,7 +303,7 @@ fn test_long_literal() {
     ];
 
     for input in possible_inputs {
-        let options = ParseOptions::default();
+        let options = ParseOptions::default().with_always_produce_end_tokens(false);
         let tokens = parse_tokens(input, &options);
 
         assert_eq!(tokens.len(), 1, "{input}");
@@ -344,7 +346,7 @@ fn test_string_literal() {
     ];
 
     for input in possible_inputs {
-        let options = ParseOptions::default();
+        let options = ParseOptions::default().with_always_produce_end_tokens(false);
         let tokens = parse_tokens(input, &options);
 
         assert_eq!(tokens.len(), 1, "{input}");
@@ -366,7 +368,7 @@ fn test_unclosed_string() {
     ];
 
     for input in inputs {
-        let options = ParseOptions::default();
+        let options = ParseOptions::default().with_always_produce_end_tokens(false);
         let tokens = parse_tokens(input, &options);
 
         assert_ne!(tokens[0].kind, SyntaxKind::StringLiteralToken, "{input}");
@@ -382,7 +384,7 @@ fn test_string_with_invalid_escape() {
     ];
 
     for input in inputs {
-        let options = ParseOptions::default();
+        let options = ParseOptions::default().with_always_produce_end_tokens(false);
         let tokens = parse_tokens(input, &options);
 
         assert_ne!(tokens[0].kind, SyntaxKind::StringLiteralToken, "{input}");
@@ -392,7 +394,7 @@ fn test_string_with_invalid_escape() {
 #[test]
 fn test_escape_at_eof() {
     let input = r#""string\""#;
-    let options = ParseOptions::default();
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
     let tokens = parse_tokens(input, &options);
 
     assert_ne!(tokens[0].kind, SyntaxKind::StringLiteralToken);
@@ -409,7 +411,7 @@ fn test_string_with_valid_escape_sequences() {
     ];
 
     for input in inputs {
-        let options = ParseOptions::default();
+        let options = ParseOptions::default().with_always_produce_end_tokens(false);
         let tokens = parse_tokens(input, &options);
 
         assert_eq!(tokens.len(), 1, "{input}");
@@ -427,7 +429,7 @@ fn test_verbatim_string_escaping() {
     ];
 
     for input in inputs {
-        let options = ParseOptions::default();
+        let options = ParseOptions::default().with_always_produce_end_tokens(false);
         let tokens = parse_tokens(input, &options);
 
         assert_eq!(tokens.len(), 1, "{input}");
@@ -439,7 +441,7 @@ fn test_verbatim_string_escaping() {
 #[test]
 fn test_string_terminates_at_newline() {
     let input = "\"string with\nunfinished line";
-    let options = ParseOptions::default();
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
     let tokens = parse_tokens(input, &options);
 
     // String should terminate at newline, making it invalid
@@ -451,7 +453,7 @@ fn test_bool_literal() {
     let possible_inputs = vec!["true", "false", "True", "False", "TRUE", "FALSE"];
 
     for input in possible_inputs {
-        let options = ParseOptions::default();
+        let options = ParseOptions::default().with_always_produce_end_tokens(false);
         let tokens = parse_tokens(input, &options);
 
         assert_eq!(tokens.len(), 1, "{input}");
@@ -479,7 +481,7 @@ fn test_simple_keywords() {
     ];
 
     for (input, expected_kind) in test_cases {
-        let options = ParseOptions::default();
+        let options = ParseOptions::default().with_always_produce_end_tokens(false);
         let tokens = parse_tokens(input, &options);
 
         assert_eq!(tokens.len(), 1, "Failed for keyword: {input}");
@@ -507,7 +509,7 @@ fn test_type_keywords() {
     ];
 
     for (input, expected_kind) in test_cases {
-        let options = ParseOptions::default();
+        let options = ParseOptions::default().with_always_produce_end_tokens(false);
         let tokens = parse_tokens(input, &options);
 
         assert_eq!(tokens.len(), 1, "Failed for type keyword: {input}");
@@ -540,7 +542,7 @@ fn test_long_keywords() {
     ];
 
     for (input, expected_kind) in test_cases {
-        let options = ParseOptions::default();
+        let options = ParseOptions::default().with_always_produce_end_tokens(false);
         let tokens = parse_tokens(input, &options);
 
         assert_eq!(tokens.len(), 1, "Failed for keyword: {input}");
@@ -565,7 +567,7 @@ fn test_keyword_with_special_chars() {
     ];
 
     for (input, expected_kind) in test_cases {
-        let options = ParseOptions::default();
+        let options = ParseOptions::default().with_always_produce_end_tokens(false);
         let tokens = parse_tokens(input, &options);
 
         assert_eq!(tokens.len(), 1, "Failed for keyword: {input}");
@@ -587,7 +589,7 @@ fn test_keyword_boundary_detection() {
     ];
 
     for (input, expected_kind) in test_cases {
-        let options = ParseOptions::default();
+        let options = ParseOptions::default().with_always_produce_end_tokens(false);
         let tokens = parse_tokens(input, &options);
 
         assert_eq!(tokens.len(), 1, "Failed for input: {input}");
@@ -601,7 +603,7 @@ fn test_keyword_boundary_detection() {
 #[test]
 fn test_keyword_followed_by_punctuation() {
     let input = "let x = 5";
-    let options = ParseOptions::default();
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
     let tokens = parse_tokens(input, &options);
 
     assert_eq!(tokens[0].kind, SyntaxKind::LetKeyword);
@@ -624,7 +626,7 @@ fn test_longest_keyword_match() {
     ];
 
     for (input, expected_kind) in test_cases {
-        let options = ParseOptions::default();
+        let options = ParseOptions::default().with_always_produce_end_tokens(false);
         let tokens = parse_tokens(input, &options);
 
         assert_eq!(tokens.len(), 1, "Failed for input: {input}");
@@ -641,7 +643,7 @@ fn test_longest_keyword_match() {
 #[test]
 fn test_goo_int_literal() {
     let input = "int(42)";
-    let options = ParseOptions::default();
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
     let tokens = parse_tokens(input, &options);
 
     assert_eq!(tokens.len(), 1);
@@ -652,7 +654,7 @@ fn test_goo_int_literal() {
 #[test]
 fn test_goo_long_literal() {
     let input = "long(123456789)";
-    let options = ParseOptions::default();
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
     let tokens = parse_tokens(input, &options);
 
     assert_eq!(tokens.len(), 1);
@@ -666,7 +668,7 @@ fn test_goo_long_literal() {
 #[test]
 fn test_goo_datetime_literal() {
     let input = "datetime(2024-01-01T12:00:00Z)";
-    let options = ParseOptions::default();
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
     let tokens = parse_tokens(input, &options);
 
     assert_eq!(tokens.len(), 1);
@@ -680,7 +682,7 @@ fn test_goo_datetime_literal() {
 #[test]
 fn test_goo_timespan_literal() {
     let input = "timespan(1d)";
-    let options = ParseOptions::default();
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
     let tokens = parse_tokens(input, &options);
 
     assert_eq!(tokens.len(), 1);
@@ -691,7 +693,7 @@ fn test_goo_timespan_literal() {
 #[test]
 fn test_goo_real_literal() {
     let input = "real(3.14159)";
-    let options = ParseOptions::default();
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
     let tokens = parse_tokens(input, &options);
 
     assert_eq!(tokens.len(), 1);
@@ -705,7 +707,7 @@ fn test_goo_real_literal() {
 #[test]
 fn test_goo_decimal_literal() {
     let input = "decimal(99.99)";
-    let options = ParseOptions::default();
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
     let tokens = parse_tokens(input, &options);
 
     assert_eq!(tokens.len(), 1);
@@ -719,7 +721,7 @@ fn test_goo_decimal_literal() {
 #[test]
 fn test_goo_guid_literal() {
     let input = "guid(12345678-1234-1234-1234-123456789012)";
-    let options = ParseOptions::default();
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
     let tokens = parse_tokens(input, &options);
 
     assert_eq!(tokens.len(), 1);
@@ -733,7 +735,7 @@ fn test_goo_guid_literal() {
 #[test]
 fn test_goo_bool_literal() {
     let input = "bool(true)";
-    let options = ParseOptions::default();
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
     let tokens = parse_tokens(input, &options);
 
     assert_eq!(tokens.len(), 1);
@@ -744,7 +746,7 @@ fn test_goo_bool_literal() {
 #[test]
 fn test_goo_with_whitespace() {
     let input = "int( 42 )";
-    let options = ParseOptions::default();
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
     let tokens = parse_tokens(input, &options);
 
     assert_eq!(tokens.len(), 1);
@@ -755,7 +757,7 @@ fn test_goo_with_whitespace() {
 #[test]
 fn test_goo_unclosed_paren() {
     let input = "int(42";
-    let options = ParseOptions::default();
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
     let tokens = parse_tokens(input, &options);
 
     // Should parse as keyword followed by open paren and number
@@ -766,7 +768,7 @@ fn test_goo_unclosed_paren() {
 #[test]
 fn test_goo_with_line_breaks_not_allowed() {
     let input = "int(\n42\n)";
-    let options = ParseOptions::default();
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
     let tokens = parse_tokens(input, &options);
 
     // Should not parse as goo literal when line breaks not allowed
@@ -777,7 +779,9 @@ fn test_goo_with_line_breaks_not_allowed() {
 #[test]
 fn test_goo_with_line_breaks_allowed() {
     let input = "int(\n42\n)";
-    let options = ParseOptions::default().with_allow_literals_with_line_breaks(true);
+    let options = ParseOptions::default()
+        .with_always_produce_end_tokens(false)
+        .with_allow_literals_with_line_breaks(true);
     let tokens = parse_tokens(input, &options);
 
     // Should parse as goo literal when line breaks allowed
@@ -789,7 +793,7 @@ fn test_goo_with_line_breaks_allowed() {
 #[test]
 fn test_type_keyword_not_followed_by_paren() {
     let input = "int + 5";
-    let options = ParseOptions::default();
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
     let tokens = parse_tokens(input, &options);
 
     assert_eq!(tokens[0].kind, SyntaxKind::IntKeyword);
@@ -801,7 +805,7 @@ fn test_type_keyword_not_followed_by_paren() {
 fn test_date_keyword_goo() {
     // date() should also create datetime literal
     let input = "date(2024-01-01)";
-    let options = ParseOptions::default();
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
     let tokens = parse_tokens(input, &options);
 
     assert_eq!(tokens.len(), 1);
@@ -812,7 +816,7 @@ fn test_date_keyword_goo() {
 fn test_time_keyword_goo() {
     // time() should create timespan literal
     let input = "time(1h)";
-    let options = ParseOptions::default();
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
     let tokens = parse_tokens(input, &options);
 
     assert_eq!(tokens.len(), 1);
@@ -822,7 +826,7 @@ fn test_time_keyword_goo() {
 #[test]
 fn test_complex_query_with_keywords() {
     let input = "let x = 5; T | where x > 10 | project col1, col2 | summarize count()";
-    let options = ParseOptions::default();
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
     let tokens = parse_tokens(input, &options);
 
     // Verify key tokens are present
@@ -846,7 +850,7 @@ fn test_hint_keywords() {
     ];
 
     for (input, expected_kind) in test_cases {
-        let options = ParseOptions::default();
+        let options = ParseOptions::default().with_always_produce_end_tokens(false);
         let tokens = parse_tokens(input, &options);
 
         assert_eq!(tokens.len(), 1, "Failed for hint keyword: {input}");
