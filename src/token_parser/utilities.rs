@@ -1,4 +1,7 @@
-use crate::token_parser::{KEYWORDS, SyntaxKind, TIMESPAN_SUFFIXES};
+use crate::token_parser::{
+    SyntaxKind,
+    constants::{KEYWORDS, TIMESPAN_SUFFIXES},
+};
 
 #[inline(always)]
 pub(crate) fn peek(bytes: &[u8], pos: usize) -> Option<&u8> {

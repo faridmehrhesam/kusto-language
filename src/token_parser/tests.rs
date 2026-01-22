@@ -11,7 +11,7 @@ fn test_empty_string() {
     let tokens = parse_tokens(input, &options);
 
     assert_eq!(tokens.len(), 1);
-    assert_eq!(tokens[0].kind, SyntaxKind::EndOfTextToken);
+    assert_eq!(tokens[0].kind(), SyntaxKind::EndOfTextToken);
     assert_eq!(tokens[0].len(), 0);
 }
 
@@ -23,9 +23,9 @@ fn test_single_punctuation() {
 
     // Expect: [+] [EOF]
     assert_eq!(tokens.len(), 2);
-    assert_eq!(tokens[0].kind, SyntaxKind::PlusToken);
-    assert_eq!(get_text(input, tokens[0].text_span.clone()), "+");
-    assert_eq!(tokens[1].kind, SyntaxKind::EndOfTextToken);
+    assert_eq!(tokens[0].kind(), SyntaxKind::PlusToken);
+    assert_eq!(get_text(input, tokens[0].text_span().clone()), "+");
+    assert_eq!(tokens[1].kind(), SyntaxKind::EndOfTextToken);
 }
 
 #[test]
@@ -34,16 +34,16 @@ fn test_multi_char_punctuation() {
     let options = ParseOptions::default().with_always_produce_end_tokens(false);
     let tokens = parse_tokens(input, &options);
 
-    assert_eq!(tokens[0].kind, SyntaxKind::LessThanOrEqualToken);
+    assert_eq!(tokens[0].kind(), SyntaxKind::LessThanOrEqualToken);
 
-    assert_eq!(tokens[1].kind, SyntaxKind::EqualEqualToken);
-    assert_eq!(get_text(input, tokens[1].trivia_span.clone()), " ");
+    assert_eq!(tokens[1].kind(), SyntaxKind::EqualEqualToken);
+    assert_eq!(get_text(input, tokens[1].trivia_span().clone()), " ");
 
-    assert_eq!(tokens[2].kind, SyntaxKind::FatArrowToken);
-    assert_eq!(get_text(input, tokens[2].trivia_span.clone()), " ");
+    assert_eq!(tokens[2].kind(), SyntaxKind::FatArrowToken);
+    assert_eq!(get_text(input, tokens[2].trivia_span().clone()), " ");
 
-    assert_eq!(tokens[3].kind, SyntaxKind::DotDotToken);
-    assert_eq!(get_text(input, tokens[3].trivia_span.clone()), " ");
+    assert_eq!(tokens[3].kind(), SyntaxKind::DotDotToken);
+    assert_eq!(get_text(input, tokens[3].trivia_span().clone()), " ");
 }
 
 #[test]
@@ -53,17 +53,17 @@ fn test_trivia_and_comments() {
     let tokens = parse_tokens(input, &options);
     let plus = &tokens[0];
 
-    assert_eq!(plus.kind, SyntaxKind::PlusToken);
+    assert_eq!(plus.kind(), SyntaxKind::PlusToken);
     assert_eq!(
-        get_text(input, plus.trivia_span.clone()),
+        get_text(input, plus.trivia_span().clone()),
         "  // this is a comment\n  "
     );
-    assert_eq!(get_text(input, plus.text_span.clone()), "+");
+    assert_eq!(get_text(input, plus.text_span().clone()), "+");
 
     // The EOF token should capture the trailing whitespace as trivia
     let eof = &tokens[1];
-    assert_eq!(eof.kind, SyntaxKind::EndOfTextToken);
-    assert_eq!(get_text(input, eof.trivia_span.clone()), "  ");
+    assert_eq!(eof.kind(), SyntaxKind::EndOfTextToken);
+    assert_eq!(get_text(input, eof.trivia_span().clone()), "  ");
 }
 
 #[test]
@@ -72,8 +72,8 @@ fn test_bad_token() {
     let options = ParseOptions::default().with_always_produce_end_tokens(false);
     let tokens = parse_tokens(input, &options);
 
-    assert_eq!(tokens[0].kind, SyntaxKind::BadToken);
-    assert_eq!(tokens[0].text_span.end - tokens[0].text_span.start, 1);
+    assert_eq!(tokens[0].kind(), SyntaxKind::BadToken);
+    assert_eq!(tokens[0].text_span().end - tokens[0].text_span().start, 1);
 }
 
 #[test]
@@ -82,7 +82,7 @@ fn test_complex_punctuation_chain() {
     let options = ParseOptions::default();
     let tokens = parse_tokens(input, &options);
 
-    let kinds: Vec<SyntaxKind> = tokens.iter().map(|t| t.kind).collect();
+    let kinds: Vec<SyntaxKind> = tokens.iter().map(|t| t.kind()).collect();
     assert_eq!(
         kinds,
         vec![
@@ -103,7 +103,7 @@ fn test_options_no_end_tokens() {
     let tokens = parse_tokens(input, &options);
 
     assert_eq!(tokens.len(), 1);
-    assert_eq!(tokens[0].kind, SyntaxKind::PlusToken);
+    assert_eq!(tokens[0].kind(), SyntaxKind::PlusToken);
 }
 
 #[test]
@@ -157,9 +157,12 @@ fn test_all_possible_punctuations() {
 
     for (i, expected_kind) in expected_kinds.iter().enumerate() {
         assert_eq!(
-            tokens[i].kind, *expected_kind,
+            tokens[i].kind(),
+            *expected_kind,
             "Mismatch at index {}: expected {:?}, but found {:?}",
-            i, expected_kind, tokens[i].kind
+            i,
+            expected_kind,
+            tokens[i].kind()
         );
     }
 }
@@ -171,7 +174,7 @@ fn test_directive() {
     let tokens = parse_tokens(input, &options);
 
     assert_eq!(tokens.len(), 1);
-    assert_eq!(tokens[0].kind, SyntaxKind::DirectiveToken);
+    assert_eq!(tokens[0].kind(), SyntaxKind::DirectiveToken);
 }
 
 #[test]
@@ -181,9 +184,9 @@ fn test_directive_with_other_tokens() {
     let tokens = parse_tokens(input, &options);
 
     assert_eq!(tokens.len(), 3);
-    assert_eq!(tokens[0].kind, SyntaxKind::PlusToken);
-    assert_eq!(tokens[1].kind, SyntaxKind::DirectiveToken);
-    assert_eq!(tokens[2].kind, SyntaxKind::PlusToken);
+    assert_eq!(tokens[0].kind(), SyntaxKind::PlusToken);
+    assert_eq!(tokens[1].kind(), SyntaxKind::DirectiveToken);
+    assert_eq!(tokens[2].kind(), SyntaxKind::PlusToken);
 }
 
 #[test]
@@ -198,9 +201,9 @@ fn test_identifier() {
         let tokens = parse_tokens(input, &options);
 
         assert_eq!(tokens.len(), 1, "{input}");
-        assert_eq!(tokens[0].kind, SyntaxKind::IdentifierToken);
-        assert_eq!(get_text(input, tokens[0].trivia_span.clone()), "");
-        assert_eq!(get_text(input, tokens[0].text_span.clone()), input);
+        assert_eq!(tokens[0].kind(), SyntaxKind::IdentifierToken);
+        assert_eq!(get_text(input, tokens[0].trivia_span().clone()), "");
+        assert_eq!(get_text(input, tokens[0].text_span().clone()), input);
     }
 }
 
@@ -217,9 +220,9 @@ fn test_raw_guid_literal() {
         let tokens = parse_tokens(input, &options);
 
         assert_eq!(tokens.len(), 1, "{input}");
-        assert_eq!(tokens[0].kind, SyntaxKind::RawGuidLiteralToken);
-        assert_eq!(get_text(input, tokens[0].trivia_span.clone()), "");
-        assert_eq!(get_text(input, tokens[0].text_span.clone()), input);
+        assert_eq!(tokens[0].kind(), SyntaxKind::RawGuidLiteralToken);
+        assert_eq!(get_text(input, tokens[0].trivia_span().clone()), "");
+        assert_eq!(get_text(input, tokens[0].text_span().clone()), input);
     }
 }
 
@@ -235,9 +238,9 @@ fn test_real_literal() {
         let tokens = parse_tokens(input, &options);
 
         assert_eq!(tokens.len(), 1, "{input}");
-        assert_eq!(tokens[0].kind, SyntaxKind::RealLiteralToken);
-        assert_eq!(get_text(input, tokens[0].trivia_span.clone()), "");
-        assert_eq!(get_text(input, tokens[0].text_span.clone()), input);
+        assert_eq!(tokens[0].kind(), SyntaxKind::RealLiteralToken);
+        assert_eq!(get_text(input, tokens[0].trivia_span().clone()), "");
+        assert_eq!(get_text(input, tokens[0].text_span().clone()), input);
     }
 }
 
@@ -286,9 +289,9 @@ fn test_timespan_literal() {
         let tokens = parse_tokens(input, &options);
 
         assert_eq!(tokens.len(), 1, "{input}");
-        assert_eq!(tokens[0].kind, SyntaxKind::TimespanLiteralToken);
-        assert_eq!(get_text(input, tokens[0].trivia_span.clone()), "");
-        assert_eq!(get_text(input, tokens[0].text_span.clone()), input);
+        assert_eq!(tokens[0].kind(), SyntaxKind::TimespanLiteralToken);
+        assert_eq!(get_text(input, tokens[0].trivia_span().clone()), "");
+        assert_eq!(get_text(input, tokens[0].text_span().clone()), input);
     }
 }
 
@@ -307,9 +310,9 @@ fn test_long_literal() {
         let tokens = parse_tokens(input, &options);
 
         assert_eq!(tokens.len(), 1, "{input}");
-        assert_eq!(tokens[0].kind, SyntaxKind::LongLiteralToken);
-        assert_eq!(get_text(input, tokens[0].trivia_span.clone()), "");
-        assert_eq!(get_text(input, tokens[0].text_span.clone()), input);
+        assert_eq!(tokens[0].kind(), SyntaxKind::LongLiteralToken);
+        assert_eq!(get_text(input, tokens[0].trivia_span().clone()), "");
+        assert_eq!(get_text(input, tokens[0].text_span().clone()), input);
     }
 }
 
@@ -350,9 +353,9 @@ fn test_string_literal() {
         let tokens = parse_tokens(input, &options);
 
         assert_eq!(tokens.len(), 1, "{input}");
-        assert_eq!(tokens[0].kind, SyntaxKind::StringLiteralToken);
-        assert_eq!(get_text(input, tokens[0].trivia_span.clone()), "");
-        assert_eq!(get_text(input, tokens[0].text_span.clone()), input);
+        assert_eq!(tokens[0].kind(), SyntaxKind::StringLiteralToken);
+        assert_eq!(get_text(input, tokens[0].trivia_span().clone()), "");
+        assert_eq!(get_text(input, tokens[0].text_span().clone()), input);
     }
 }
 
@@ -371,7 +374,7 @@ fn test_unclosed_string() {
         let options = ParseOptions::default().with_always_produce_end_tokens(false);
         let tokens = parse_tokens(input, &options);
 
-        assert_ne!(tokens[0].kind, SyntaxKind::StringLiteralToken, "{input}");
+        assert_ne!(tokens[0].kind(), SyntaxKind::StringLiteralToken, "{input}");
     }
 }
 
@@ -387,7 +390,7 @@ fn test_string_with_invalid_escape() {
         let options = ParseOptions::default().with_always_produce_end_tokens(false);
         let tokens = parse_tokens(input, &options);
 
-        assert_ne!(tokens[0].kind, SyntaxKind::StringLiteralToken, "{input}");
+        assert_ne!(tokens[0].kind(), SyntaxKind::StringLiteralToken, "{input}");
     }
 }
 
@@ -397,7 +400,7 @@ fn test_escape_at_eof() {
     let options = ParseOptions::default().with_always_produce_end_tokens(false);
     let tokens = parse_tokens(input, &options);
 
-    assert_ne!(tokens[0].kind, SyntaxKind::StringLiteralToken);
+    assert_ne!(tokens[0].kind(), SyntaxKind::StringLiteralToken);
 }
 
 #[test]
@@ -415,8 +418,8 @@ fn test_string_with_valid_escape_sequences() {
         let tokens = parse_tokens(input, &options);
 
         assert_eq!(tokens.len(), 1, "{input}");
-        assert_eq!(tokens[0].kind, SyntaxKind::StringLiteralToken, "{input}");
-        assert_eq!(get_text(input, tokens[0].text_span.clone()), input);
+        assert_eq!(tokens[0].kind(), SyntaxKind::StringLiteralToken, "{input}");
+        assert_eq!(get_text(input, tokens[0].text_span().clone()), input);
     }
 }
 
@@ -433,8 +436,8 @@ fn test_verbatim_string_escaping() {
         let tokens = parse_tokens(input, &options);
 
         assert_eq!(tokens.len(), 1, "{input}");
-        assert_eq!(tokens[0].kind, SyntaxKind::StringLiteralToken, "{input}");
-        assert_eq!(get_text(input, tokens[0].text_span.clone()), input);
+        assert_eq!(tokens[0].kind(), SyntaxKind::StringLiteralToken, "{input}");
+        assert_eq!(get_text(input, tokens[0].text_span().clone()), input);
     }
 }
 
@@ -445,7 +448,7 @@ fn test_string_terminates_at_newline() {
     let tokens = parse_tokens(input, &options);
 
     // String should terminate at newline, making it invalid
-    assert_ne!(tokens[0].kind, SyntaxKind::StringLiteralToken);
+    assert_ne!(tokens[0].kind(), SyntaxKind::StringLiteralToken);
 }
 
 #[test]
@@ -457,9 +460,9 @@ fn test_bool_literal() {
         let tokens = parse_tokens(input, &options);
 
         assert_eq!(tokens.len(), 1, "{input}");
-        assert_eq!(tokens[0].kind, SyntaxKind::BooleanLiteralToken);
-        assert_eq!(get_text(input, tokens[0].trivia_span.clone()), "");
-        assert_eq!(get_text(input, tokens[0].text_span.clone()), input);
+        assert_eq!(tokens[0].kind(), SyntaxKind::BooleanLiteralToken);
+        assert_eq!(get_text(input, tokens[0].trivia_span().clone()), "");
+        assert_eq!(get_text(input, tokens[0].text_span().clone()), input);
     }
 }
 
@@ -486,10 +489,11 @@ fn test_simple_keywords() {
 
         assert_eq!(tokens.len(), 1, "Failed for keyword: {input}");
         assert_eq!(
-            tokens[0].kind, expected_kind,
+            tokens[0].kind(),
+            expected_kind,
             "Wrong kind for keyword: {input}"
         );
-        assert_eq!(get_text(input, tokens[0].text_span.clone()), input);
+        assert_eq!(get_text(input, tokens[0].text_span().clone()), input);
     }
 }
 
@@ -514,7 +518,8 @@ fn test_type_keywords() {
 
         assert_eq!(tokens.len(), 1, "Failed for type keyword: {input}");
         assert_eq!(
-            tokens[0].kind, expected_kind,
+            tokens[0].kind(),
+            expected_kind,
             "Wrong kind for type keyword: {input}"
         );
     }
@@ -547,10 +552,11 @@ fn test_long_keywords() {
 
         assert_eq!(tokens.len(), 1, "Failed for keyword: {input}");
         assert_eq!(
-            tokens[0].kind, expected_kind,
+            tokens[0].kind(),
+            expected_kind,
             "Wrong kind for keyword: {input}"
         );
-        assert_eq!(get_text(input, tokens[0].text_span.clone()), input);
+        assert_eq!(get_text(input, tokens[0].text_span().clone()), input);
     }
 }
 
@@ -572,7 +578,8 @@ fn test_keyword_with_special_chars() {
 
         assert_eq!(tokens.len(), 1, "Failed for keyword: {input}");
         assert_eq!(
-            tokens[0].kind, expected_kind,
+            tokens[0].kind(),
+            expected_kind,
             "Wrong kind for keyword: {input}"
         );
     }
@@ -594,7 +601,8 @@ fn test_keyword_boundary_detection() {
 
         assert_eq!(tokens.len(), 1, "Failed for input: {input}");
         assert_eq!(
-            tokens[0].kind, expected_kind,
+            tokens[0].kind(),
+            expected_kind,
             "Wrong kind for input: {input}"
         );
     }
@@ -606,10 +614,10 @@ fn test_keyword_followed_by_punctuation() {
     let options = ParseOptions::default().with_always_produce_end_tokens(false);
     let tokens = parse_tokens(input, &options);
 
-    assert_eq!(tokens[0].kind, SyntaxKind::LetKeyword);
-    assert_eq!(tokens[1].kind, SyntaxKind::IdentifierToken);
-    assert_eq!(tokens[2].kind, SyntaxKind::EqualToken);
-    assert_eq!(tokens[3].kind, SyntaxKind::LongLiteralToken);
+    assert_eq!(tokens[0].kind(), SyntaxKind::LetKeyword);
+    assert_eq!(tokens[1].kind(), SyntaxKind::IdentifierToken);
+    assert_eq!(tokens[2].kind(), SyntaxKind::EqualToken);
+    assert_eq!(tokens[3].kind(), SyntaxKind::LongLiteralToken);
 }
 
 #[test]
@@ -631,10 +639,11 @@ fn test_longest_keyword_match() {
 
         assert_eq!(tokens.len(), 1, "Failed for input: {input}");
         assert_eq!(
-            tokens[0].kind, expected_kind,
+            tokens[0].kind(),
+            expected_kind,
             "Wrong kind for input: {input}"
         );
-        assert_eq!(get_text(input, tokens[0].text_span.clone()), input);
+        assert_eq!(get_text(input, tokens[0].text_span().clone()), input);
     }
 }
 
@@ -647,8 +656,8 @@ fn test_goo_int_literal() {
     let tokens = parse_tokens(input, &options);
 
     assert_eq!(tokens.len(), 1);
-    assert_eq!(tokens[0].kind, SyntaxKind::IntLiteralToken);
-    assert_eq!(get_text(input, tokens[0].text_span.clone()), "int(42)");
+    assert_eq!(tokens[0].kind(), SyntaxKind::IntLiteralToken);
+    assert_eq!(get_text(input, tokens[0].text_span().clone()), "int(42)");
 }
 
 #[test]
@@ -658,9 +667,9 @@ fn test_goo_long_literal() {
     let tokens = parse_tokens(input, &options);
 
     assert_eq!(tokens.len(), 1);
-    assert_eq!(tokens[0].kind, SyntaxKind::LongLiteralToken);
+    assert_eq!(tokens[0].kind(), SyntaxKind::LongLiteralToken);
     assert_eq!(
-        get_text(input, tokens[0].text_span.clone()),
+        get_text(input, tokens[0].text_span().clone()),
         "long(123456789)"
     );
 }
@@ -672,9 +681,9 @@ fn test_goo_datetime_literal() {
     let tokens = parse_tokens(input, &options);
 
     assert_eq!(tokens.len(), 1);
-    assert_eq!(tokens[0].kind, SyntaxKind::DateTimeLiteralToken);
+    assert_eq!(tokens[0].kind(), SyntaxKind::DateTimeLiteralToken);
     assert_eq!(
-        get_text(input, tokens[0].text_span.clone()),
+        get_text(input, tokens[0].text_span().clone()),
         "datetime(2024-01-01T12:00:00Z)"
     );
 }
@@ -686,8 +695,11 @@ fn test_goo_timespan_literal() {
     let tokens = parse_tokens(input, &options);
 
     assert_eq!(tokens.len(), 1);
-    assert_eq!(tokens[0].kind, SyntaxKind::TimespanLiteralToken);
-    assert_eq!(get_text(input, tokens[0].text_span.clone()), "timespan(1d)");
+    assert_eq!(tokens[0].kind(), SyntaxKind::TimespanLiteralToken);
+    assert_eq!(
+        get_text(input, tokens[0].text_span().clone()),
+        "timespan(1d)"
+    );
 }
 
 #[test]
@@ -697,9 +709,9 @@ fn test_goo_real_literal() {
     let tokens = parse_tokens(input, &options);
 
     assert_eq!(tokens.len(), 1);
-    assert_eq!(tokens[0].kind, SyntaxKind::RealLiteralToken);
+    assert_eq!(tokens[0].kind(), SyntaxKind::RealLiteralToken);
     assert_eq!(
-        get_text(input, tokens[0].text_span.clone()),
+        get_text(input, tokens[0].text_span().clone()),
         "real(3.14159)"
     );
 }
@@ -711,9 +723,9 @@ fn test_goo_decimal_literal() {
     let tokens = parse_tokens(input, &options);
 
     assert_eq!(tokens.len(), 1);
-    assert_eq!(tokens[0].kind, SyntaxKind::DecimalLiteralToken);
+    assert_eq!(tokens[0].kind(), SyntaxKind::DecimalLiteralToken);
     assert_eq!(
-        get_text(input, tokens[0].text_span.clone()),
+        get_text(input, tokens[0].text_span().clone()),
         "decimal(99.99)"
     );
 }
@@ -725,9 +737,9 @@ fn test_goo_guid_literal() {
     let tokens = parse_tokens(input, &options);
 
     assert_eq!(tokens.len(), 1);
-    assert_eq!(tokens[0].kind, SyntaxKind::GuidLiteralToken);
+    assert_eq!(tokens[0].kind(), SyntaxKind::GuidLiteralToken);
     assert_eq!(
-        get_text(input, tokens[0].text_span.clone()),
+        get_text(input, tokens[0].text_span().clone()),
         "guid(12345678-1234-1234-1234-123456789012)"
     );
 }
@@ -739,8 +751,8 @@ fn test_goo_bool_literal() {
     let tokens = parse_tokens(input, &options);
 
     assert_eq!(tokens.len(), 1);
-    assert_eq!(tokens[0].kind, SyntaxKind::BooleanLiteralToken);
-    assert_eq!(get_text(input, tokens[0].text_span.clone()), "bool(true)");
+    assert_eq!(tokens[0].kind(), SyntaxKind::BooleanLiteralToken);
+    assert_eq!(get_text(input, tokens[0].text_span().clone()), "bool(true)");
 }
 
 #[test]
@@ -750,8 +762,8 @@ fn test_goo_with_whitespace() {
     let tokens = parse_tokens(input, &options);
 
     assert_eq!(tokens.len(), 1);
-    assert_eq!(tokens[0].kind, SyntaxKind::IntLiteralToken);
-    assert_eq!(get_text(input, tokens[0].text_span.clone()), "int( 42 )");
+    assert_eq!(tokens[0].kind(), SyntaxKind::IntLiteralToken);
+    assert_eq!(get_text(input, tokens[0].text_span().clone()), "int( 42 )");
 }
 
 #[test]
@@ -762,7 +774,7 @@ fn test_goo_unclosed_paren() {
 
     // Should parse as keyword followed by open paren and number
     assert!(tokens.len() > 1);
-    assert_eq!(tokens[0].kind, SyntaxKind::IntKeyword);
+    assert_eq!(tokens[0].kind(), SyntaxKind::IntKeyword);
 }
 
 #[test]
@@ -773,7 +785,7 @@ fn test_goo_with_line_breaks_not_allowed() {
 
     // Should not parse as goo literal when line breaks not allowed
     assert!(tokens.len() > 1);
-    assert_eq!(tokens[0].kind, SyntaxKind::IntKeyword);
+    assert_eq!(tokens[0].kind(), SyntaxKind::IntKeyword);
 }
 
 #[test]
@@ -786,8 +798,11 @@ fn test_goo_with_line_breaks_allowed() {
 
     // Should parse as goo literal when line breaks allowed
     assert_eq!(tokens.len(), 1);
-    assert_eq!(tokens[0].kind, SyntaxKind::IntLiteralToken);
-    assert_eq!(get_text(input, tokens[0].text_span.clone()), "int(\n42\n)");
+    assert_eq!(tokens[0].kind(), SyntaxKind::IntLiteralToken);
+    assert_eq!(
+        get_text(input, tokens[0].text_span().clone()),
+        "int(\n42\n)"
+    );
 }
 
 #[test]
@@ -796,9 +811,9 @@ fn test_type_keyword_not_followed_by_paren() {
     let options = ParseOptions::default().with_always_produce_end_tokens(false);
     let tokens = parse_tokens(input, &options);
 
-    assert_eq!(tokens[0].kind, SyntaxKind::IntKeyword);
-    assert_eq!(tokens[1].kind, SyntaxKind::PlusToken);
-    assert_eq!(tokens[2].kind, SyntaxKind::LongLiteralToken);
+    assert_eq!(tokens[0].kind(), SyntaxKind::IntKeyword);
+    assert_eq!(tokens[1].kind(), SyntaxKind::PlusToken);
+    assert_eq!(tokens[2].kind(), SyntaxKind::LongLiteralToken);
 }
 
 #[test]
@@ -809,7 +824,7 @@ fn test_date_keyword_goo() {
     let tokens = parse_tokens(input, &options);
 
     assert_eq!(tokens.len(), 1);
-    assert_eq!(tokens[0].kind, SyntaxKind::DateTimeLiteralToken);
+    assert_eq!(tokens[0].kind(), SyntaxKind::DateTimeLiteralToken);
 }
 
 #[test]
@@ -820,7 +835,7 @@ fn test_time_keyword_goo() {
     let tokens = parse_tokens(input, &options);
 
     assert_eq!(tokens.len(), 1);
-    assert_eq!(tokens[0].kind, SyntaxKind::TimespanLiteralToken);
+    assert_eq!(tokens[0].kind(), SyntaxKind::TimespanLiteralToken);
 }
 
 #[test]
@@ -830,13 +845,17 @@ fn test_complex_query_with_keywords() {
     let tokens = parse_tokens(input, &options);
 
     // Verify key tokens are present
-    assert_eq!(tokens[0].kind, SyntaxKind::LetKeyword);
-    assert!(tokens.iter().any(|t| t.kind == SyntaxKind::WhereKeyword));
-    assert!(tokens.iter().any(|t| t.kind == SyntaxKind::ProjectKeyword));
+    assert_eq!(tokens[0].kind(), SyntaxKind::LetKeyword);
+    assert!(tokens.iter().any(|t| t.kind() == SyntaxKind::WhereKeyword));
     assert!(
         tokens
             .iter()
-            .any(|t| t.kind == SyntaxKind::SummarizeKeyword)
+            .any(|t| t.kind() == SyntaxKind::ProjectKeyword)
+    );
+    assert!(
+        tokens
+            .iter()
+            .any(|t| t.kind() == SyntaxKind::SummarizeKeyword)
     );
 }
 
@@ -855,7 +874,8 @@ fn test_hint_keywords() {
 
         assert_eq!(tokens.len(), 1, "Failed for hint keyword: {input}");
         assert_eq!(
-            tokens[0].kind, expected_kind,
+            tokens[0].kind(),
+            expected_kind,
             "Wrong kind for hint keyword: {input}"
         );
     }
