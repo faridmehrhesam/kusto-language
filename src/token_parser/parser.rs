@@ -1,7 +1,9 @@
 use super::scanner::*;
 use super::utilities::*;
-use crate::token_parser::BOOL_LITERALS;
-use crate::token_parser::{AVG_BYTES_PER_TOKEN, LexicalToken, ParseOptions, SyntaxKind};
+use crate::token_parser::{
+    LexicalToken, ParseOptions, SyntaxKind,
+    constants::{AVG_BYTES_PER_TOKEN, BOOL_LITERALS, MULTI_LINE_STRING_SEQUENCES},
+};
 use std::ops::Range;
 
 pub fn parse_tokens(text: &str, options: &ParseOptions) -> Vec<LexicalToken> {
@@ -11,7 +13,7 @@ pub fn parse_tokens(text: &str, options: &ParseOptions) -> Vec<LexicalToken> {
     let mut pos = 0;
 
     while let Some(token) = next_token(bytes, pos, options) {
-        let is_eof = token.kind == SyntaxKind::EndOfTextToken;
+        let is_eof = token.kind() == SyntaxKind::EndOfTextToken;
         pos += token.len();
         tokens.push(token);
 
@@ -38,30 +40,30 @@ fn next_token(bytes: &[u8], start: usize, options: &ParseOptions) -> Option<Lexi
 
             if is_string_literal_start_quote(byte) {
                 if let Some(range) = parse_string_literal(bytes, pos) {
-                    return Some(LexicalToken {
-                        kind: SyntaxKind::StringLiteralToken,
-                        trivia_span: trivia,
-                        text_span: range,
-                    });
+                    return Some(LexicalToken::new(
+                        SyntaxKind::StringLiteralToken,
+                        trivia,
+                        range,
+                    ));
                 }
             } else if byte == b'@'
                 && let Some(&next_byte) = peek(bytes, pos + 1)
                 && is_string_literal_start_quote(next_byte)
             {
                 if let Some(range) = parse_string_literal(bytes, pos) {
-                    return Some(LexicalToken {
-                        kind: SyntaxKind::StringLiteralToken,
-                        trivia_span: trivia,
-                        text_span: range,
-                    });
+                    return Some(LexicalToken::new(
+                        SyntaxKind::StringLiteralToken,
+                        trivia,
+                        range,
+                    ));
                 }
             } else if byte == b'#' {
                 let directive_end = get_line_end(bytes, pos);
-                return Some(LexicalToken {
-                    kind: SyntaxKind::DirectiveToken,
-                    trivia_span: trivia,
-                    text_span: pos..directive_end,
-                });
+                return Some(LexicalToken::new(
+                    SyntaxKind::DirectiveToken,
+                    trivia,
+                    pos..directive_end,
+                ));
             } else if is_at_end(bytes, pos) {
                 if has_trivia || options.always_produce_end_tokens {
                     return Some(LexicalToken::new(
@@ -81,11 +83,11 @@ fn next_token(bytes: &[u8], start: usize, options: &ParseOptions) -> Option<Lexi
                 && let Some(goo_kind) = get_goo_literal_kind_from_keyword_kind(keyword_kind)
                 && let Some(goo_len) = scan_goo(bytes, pos + keyword_len, options)
             {
-                return Some(LexicalToken {
-                    kind: goo_kind,
-                    trivia_span: trivia,
-                    text_span: pos..pos + keyword_len + goo_len,
-                });
+                return Some(LexicalToken::new(
+                    goo_kind,
+                    trivia,
+                    pos..pos + keyword_len + goo_len,
+                ));
             }
 
             let is_keyword = match peek(bytes, pos + keyword_len) {
@@ -94,11 +96,11 @@ fn next_token(bytes: &[u8], start: usize, options: &ParseOptions) -> Option<Lexi
             };
 
             if is_keyword {
-                return Some(LexicalToken {
-                    kind: keyword_kind,
-                    trivia_span: trivia,
-                    text_span: pos..pos + keyword_len,
-                });
+                return Some(LexicalToken::new(
+                    keyword_kind,
+                    trivia,
+                    pos..pos + keyword_len,
+                ));
             }
         }
 
@@ -110,20 +112,20 @@ fn next_token(bytes: &[u8], start: usize, options: &ParseOptions) -> Option<Lexi
                 };
 
                 if is_bool {
-                    return Some(LexicalToken {
-                        kind: SyntaxKind::BooleanLiteralToken,
-                        trivia_span: trivia,
-                        text_span: pos..pos + bool_len,
-                    });
+                    return Some(LexicalToken::new(
+                        SyntaxKind::BooleanLiteralToken,
+                        trivia,
+                        pos..pos + bool_len,
+                    ));
                 }
             }
 
             if let Some(raw_guid_len) = scan_raw_guid_literal(bytes, pos) {
-                return Some(LexicalToken {
-                    kind: SyntaxKind::RawGuidLiteralToken,
-                    trivia_span: trivia,
-                    text_span: pos..pos + raw_guid_len,
-                });
+                return Some(LexicalToken::new(
+                    SyntaxKind::RawGuidLiteralToken,
+                    trivia,
+                    pos..pos + raw_guid_len,
+                ));
             }
 
             if let Some(id_len) = scan_identifier(bytes, pos) {
@@ -133,54 +135,54 @@ fn next_token(bytes: &[u8], start: usize, options: &ParseOptions) -> Option<Lexi
                     && (is_string_literal_start_quote(next_byte) || next_byte == b'@')
                     && let Some(range) = parse_string_literal(bytes, pos)
                 {
-                    return Some(LexicalToken {
-                        kind: SyntaxKind::StringLiteralToken,
-                        trivia_span: trivia,
-                        text_span: range,
-                    });
+                    return Some(LexicalToken::new(
+                        SyntaxKind::StringLiteralToken,
+                        trivia,
+                        range,
+                    ));
                 }
 
-                return Some(LexicalToken {
-                    kind: SyntaxKind::IdentifierToken,
-                    trivia_span: trivia,
-                    text_span: pos..pos + id_len,
-                });
+                return Some(LexicalToken::new(
+                    SyntaxKind::IdentifierToken,
+                    trivia,
+                    pos..pos + id_len,
+                ));
             }
         } else if byte.is_ascii_digit() {
             if let Some(raw_guid_len) = scan_raw_guid_literal(bytes, pos) {
-                return Some(LexicalToken {
-                    kind: SyntaxKind::RawGuidLiteralToken,
-                    trivia_span: trivia,
-                    text_span: pos..pos + raw_guid_len,
-                });
+                return Some(LexicalToken::new(
+                    SyntaxKind::RawGuidLiteralToken,
+                    trivia,
+                    pos..pos + raw_guid_len,
+                ));
             }
             if let Some(real_len) = scan_real_literal(bytes, pos) {
-                return Some(LexicalToken {
-                    kind: SyntaxKind::RealLiteralToken,
-                    trivia_span: trivia,
-                    text_span: pos..pos + real_len,
-                });
+                return Some(LexicalToken::new(
+                    SyntaxKind::RealLiteralToken,
+                    trivia,
+                    pos..pos + real_len,
+                ));
             }
             if let Some(timespan_len) = scan_timespan_literal(bytes, pos) {
-                return Some(LexicalToken {
-                    kind: SyntaxKind::TimespanLiteralToken,
-                    trivia_span: trivia,
-                    text_span: pos..pos + timespan_len,
-                });
+                return Some(LexicalToken::new(
+                    SyntaxKind::TimespanLiteralToken,
+                    trivia,
+                    pos..pos + timespan_len,
+                ));
             }
             if let Some(long_len) = scan_long_literal(bytes, pos) {
-                return Some(LexicalToken {
-                    kind: SyntaxKind::LongLiteralToken,
-                    trivia_span: trivia,
-                    text_span: pos..pos + long_len,
-                });
+                return Some(LexicalToken::new(
+                    SyntaxKind::LongLiteralToken,
+                    trivia,
+                    pos..pos + long_len,
+                ));
             }
             if let Some(id_len) = scan_identifier(bytes, pos) {
-                return Some(LexicalToken {
-                    kind: SyntaxKind::IdentifierToken,
-                    trivia_span: trivia,
-                    text_span: pos..pos + id_len,
-                });
+                return Some(LexicalToken::new(
+                    SyntaxKind::IdentifierToken,
+                    trivia,
+                    pos..pos + id_len,
+                ));
             }
         }
     } else {
@@ -345,7 +347,7 @@ fn parse_string_literal(bytes: &[u8], start: usize) -> Option<Range<usize>> {
             return None;
         }
     } else {
-        for sequence in crate::token_parser::MULTI_LINE_STRING_SEQUENCES {
+        for sequence in MULTI_LINE_STRING_SEQUENCES {
             if matches_sequence(bytes, start, sequence) {
                 pos += sequence.len();
                 pos += scan_multi_line_string_literal(bytes, pos, sequence);
