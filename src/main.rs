@@ -6,7 +6,7 @@ use kusto_language::{
 
 fn main() {
     let options = ParseOptions::default().with_always_produce_end_tokens(false);
-    let tokens = parse_tokens("{'A':{'B':1}}", &options);
+    let tokens = parse_tokens("{'A':{'B':[1,2,3]}}", &options);
     let result = query().parse(&tokens);
 
     if let Some(syntax_node) = result.into_output() {

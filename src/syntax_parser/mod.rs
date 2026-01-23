@@ -10,6 +10,7 @@ pub enum SyntaxNode {
     PrefixUnaryExpression(PrefixUnaryExpression),
     JsonPair(JsonPair),
     JsonObjectExpression(JsonObjectExpression),
+    JsonArrayExpression(JsonArrayExpression),
     SeparatedElement(SeparatedElement),
     SyntaxList(SyntaxList),
 }
@@ -21,6 +22,7 @@ impl Debug for SyntaxNode {
             SyntaxNode::PrefixUnaryExpression(node) => write!(f, "{:#?}", node),
             SyntaxNode::JsonPair(node) => write!(f, "{:#?}", node),
             SyntaxNode::JsonObjectExpression(node) => write!(f, "{:#?}", node),
+            SyntaxNode::JsonArrayExpression(node) => write!(f, "{:#?}", node),
             SyntaxNode::SeparatedElement(node) => write!(f, "{:#?}", node),
             SyntaxNode::SyntaxList(node) => write!(f, "{:#?}", node),
         }
@@ -55,6 +57,13 @@ pub struct JsonObjectExpression {
 }
 
 #[derive(Debug, Clone)]
+pub struct JsonArrayExpression {
+    open_bracket: Box<LexicalToken>,
+    elements: SyntaxList,
+    close_bracket: Box<LexicalToken>,
+}
+
+#[derive(Debug, Clone)]
 pub struct SeparatedElement {
     element: Box<SyntaxNode>,
     separator: Option<Box<LexicalToken>>,
@@ -66,13 +75,13 @@ pub struct SyntaxList {
 }
 
 pub fn query<'a>()
--> impl Parser<'a, &'a [LexicalToken], SyntaxNode, extra::Err<Rich<'a, LexicalToken>>>  + Clone{
-    json_object()
+-> impl Parser<'a, &'a [LexicalToken], SyntaxNode, extra::Err<Rich<'a, LexicalToken>>> + Clone {
+    json_value()
 }
 
 fn token<'a>(
     kind: SyntaxKind,
-) -> impl Parser<'a, &'a [LexicalToken], LexicalToken, extra::Err<Rich<'a, LexicalToken>>>  + Clone{
+) -> impl Parser<'a, &'a [LexicalToken], LexicalToken, extra::Err<Rich<'a, LexicalToken>>> + Clone {
     select(move |token: LexicalToken, _| {
         if token.kind() == kind {
             Some(token)
@@ -82,15 +91,67 @@ fn token<'a>(
     })
 }
 
-fn json_object<'a>()
--> impl Parser<'a, &'a [LexicalToken], SyntaxNode, extra::Err<Rich<'a, LexicalToken>>> + Clone {
-    token(SyntaxKind::OpenBraceToken)
+fn json_array<'a>(
+    value: impl Parser<'a, &'a [LexicalToken], SyntaxNode, extra::Err<Rich<'a, LexicalToken>>>
+    + Clone
+    + 'a,
+) -> impl Parser<'a, &'a [LexicalToken], SyntaxNode, extra::Err<Rich<'a, LexicalToken>>> + Clone + 'a
+{
+    token(SyntaxKind::OpenBracketToken)
         .then(
-            json_pair()
+            value
+                .clone()
                 .then(token(SyntaxKind::CommaToken))
                 .repeated()
                 .collect::<Vec<_>>()
-                .then(json_pair())
+                .then(value)
+                .map(|(with_commas, last)| {
+                    let mut elements = Vec::new();
+                    for (val, comma) in with_commas {
+                        elements.push(SyntaxNode::SeparatedElement(SeparatedElement {
+                            element: Box::new(val),
+                            separator: Some(Box::new(comma)),
+                        }));
+                    }
+
+                    elements.push(SyntaxNode::SeparatedElement(SeparatedElement {
+                        element: Box::new(last),
+                        separator: None,
+                    }));
+
+                    SyntaxNode::SyntaxList(SyntaxList { elements })
+                }),
+        )
+        .then(token(SyntaxKind::CloseBracketToken))
+        .map(|((open_bracket, elements), close_bracket)| {
+            let elements = match elements {
+                SyntaxNode::SyntaxList(list) => list,
+                _ => unreachable!(),
+            };
+
+            SyntaxNode::JsonArrayExpression(JsonArrayExpression {
+                open_bracket: Box::new(open_bracket),
+                elements,
+                close_bracket: Box::new(close_bracket),
+            })
+        })
+}
+
+fn json_object<'a>(
+    value: impl Parser<'a, &'a [LexicalToken], SyntaxNode, extra::Err<Rich<'a, LexicalToken>>>
+    + Clone
+    + 'a,
+) -> impl Parser<'a, &'a [LexicalToken], SyntaxNode, extra::Err<Rich<'a, LexicalToken>>> + Clone + 'a
+{
+    let json_pair = json_pair(value);
+    token(SyntaxKind::OpenBraceToken)
+        .then(
+            json_pair
+                .clone()
+                .then(token(SyntaxKind::CommaToken))
+                .repeated()
+                .collect::<Vec<_>>()
+                .then(json_pair)
                 .map(|(with_commas, last)| {
                     let mut elements = Vec::new();
                     for (pair, comma) in with_commas {
@@ -123,31 +184,35 @@ fn json_object<'a>()
         })
 }
 
-fn json_pair<'a>()
--> impl Parser<'a, &'a [LexicalToken], SyntaxNode, extra::Err<Rich<'a, LexicalToken>>> + Clone {
+fn json_pair<'a>(
+    value: impl Parser<'a, &'a [LexicalToken], SyntaxNode, extra::Err<Rich<'a, LexicalToken>>>
+    + Clone
+    + 'a,
+) -> impl Parser<'a, &'a [LexicalToken], SyntaxNode, extra::Err<Rich<'a, LexicalToken>>> + Clone + 'a
+{
     string_literal()
         .then(token(SyntaxKind::ColonToken))
-        .then(json_value())
-        .map(|((key, colon), value)| {
+        .then(value)
+        .map(|((key, colon), val)| {
             SyntaxNode::JsonPair(JsonPair {
                 key: Box::new(key),
                 colon: Box::new(colon),
-                value: Box::new(value),
+                value: Box::new(val),
             })
         })
 }
 
 fn json_value<'a>()
 -> impl Parser<'a, &'a [LexicalToken], SyntaxNode, extra::Err<Rich<'a, LexicalToken>>> + Clone {
-    recursive(|value| {        
+    recursive(|value| {
         let number = json_number();
         let boolean = boolean_literal();
-        let object = json_object();
+        let object = json_object(value.clone());
+        let array = json_array(value);
 
-        choice((number, boolean, object))
+        choice((number, boolean, object, array))
     })
 }
-
 fn json_number<'a>()
 -> impl Parser<'a, &'a [LexicalToken], SyntaxNode, extra::Err<Rich<'a, LexicalToken>>> + Clone {
     token(SyntaxKind::MinusToken)
