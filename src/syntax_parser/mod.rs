@@ -1,26 +1,78 @@
+use std::fmt::Debug;
+
 use crate::token_parser::{LexicalToken, SyntaxKind};
 use chumsky::prelude::*;
 use chumsky::primitive::select;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum SyntaxNode {
-    NameDeclaration(LexicalToken),
-    BracketedNameDeclaration(LexicalToken, Box<SyntaxNode>, LexicalToken),
-    NameAndTypeDeclaration(Box<SyntaxNode>, LexicalToken, Box<SyntaxNode>),
-    StringLiteralExpression(LexicalToken),
-    CompoundStringLiteralExpression(Vec<LexicalToken>),
-    PrimitiveTypeExpression(LexicalToken),
-    SchemaTypeExpression(LexicalToken, Box<SyntaxNode>, LexicalToken),
-    SeparatedElement(Box<SyntaxNode>, Option<LexicalToken>),
-    SyntaxList(Vec<SyntaxNode>),
-    StarExpression(LexicalToken),
+    LiteralExpression(LiteralExpression),
+    PrefixUnaryExpression(PrefixUnaryExpression),
+    JsonPair(JsonPair),
+    JsonObjectExpression(JsonObjectExpression),
+    SeparatedElement(SeparatedElement),
+    SyntaxList(SyntaxList),
 }
 
-pub fn query<'a>() -> impl Parser<'a, &'a [LexicalToken], SyntaxNode> {
-    name_and_type_declaration()
+impl Debug for SyntaxNode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SyntaxNode::LiteralExpression(node) => write!(f, "{:#?}", node),
+            SyntaxNode::PrefixUnaryExpression(node) => write!(f, "{:#?}", node),
+            SyntaxNode::JsonPair(node) => write!(f, "{:#?}", node),
+            SyntaxNode::JsonObjectExpression(node) => write!(f, "{:#?}", node),
+            SyntaxNode::SeparatedElement(node) => write!(f, "{:#?}", node),
+            SyntaxNode::SyntaxList(node) => write!(f, "{:#?}", node),
+        }
+    }
 }
 
-fn token<'a>(kind: SyntaxKind) -> impl Parser<'a, &'a [LexicalToken], LexicalToken> {
+#[derive(Debug, Clone)]
+pub struct PrefixUnaryExpression {
+    kind: SyntaxKind,
+    operator: Option<Box<LexicalToken>>,
+    expression: Box<SyntaxNode>,
+}
+
+#[derive(Debug, Clone)]
+pub struct LiteralExpression {
+    kind: SyntaxKind,
+    token: Box<LexicalToken>,
+}
+
+#[derive(Debug, Clone)]
+pub struct JsonPair {
+    key: Box<SyntaxNode>,
+    colon: Box<LexicalToken>,
+    value: Box<SyntaxNode>,
+}
+
+#[derive(Debug, Clone)]
+pub struct JsonObjectExpression {
+    open_brace: Box<LexicalToken>,
+    pairs: SyntaxList,
+    close_brace: Box<LexicalToken>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SeparatedElement {
+    element: Box<SyntaxNode>,
+    separator: Option<Box<LexicalToken>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SyntaxList {
+    elements: Vec<SyntaxNode>,
+}
+
+pub fn query<'a>()
+-> impl Parser<'a, &'a [LexicalToken], SyntaxNode, extra::Err<Rich<'a, LexicalToken>>>  + Clone{
+    json_object()
+}
+
+fn token<'a>(
+    kind: SyntaxKind,
+) -> impl Parser<'a, &'a [LexicalToken], LexicalToken, extra::Err<Rich<'a, LexicalToken>>>  + Clone{
     select(move |token: LexicalToken, _| {
         if token.kind() == kind {
             Some(token)
@@ -30,99 +82,122 @@ fn token<'a>(kind: SyntaxKind) -> impl Parser<'a, &'a [LexicalToken], LexicalTok
     })
 }
 
-fn name_and_type_declaration<'a>() -> impl Parser<'a, &'a [LexicalToken], SyntaxNode> {
-    let case1 = extended_name_declaration()
-        .then(token(SyntaxKind::ColonToken))
-        .then(schema_type());
+fn json_object<'a>()
+-> impl Parser<'a, &'a [LexicalToken], SyntaxNode, extra::Err<Rich<'a, LexicalToken>>> + Clone {
+    token(SyntaxKind::OpenBraceToken)
+        .then(
+            json_pair()
+                .then(token(SyntaxKind::CommaToken))
+                .repeated()
+                .collect::<Vec<_>>()
+                .then(json_pair())
+                .map(|(with_commas, last)| {
+                    let mut elements = Vec::new();
+                    for (pair, comma) in with_commas {
+                        elements.push(SyntaxNode::SeparatedElement(SeparatedElement {
+                            element: Box::new(pair),
+                            separator: Some(Box::new(comma)),
+                        }));
+                    }
 
-    let case2 = extended_name_declaration()
-        .then(token(SyntaxKind::ColonToken))
-        .then(param_type());
+                    elements.push(SyntaxNode::SeparatedElement(SeparatedElement {
+                        element: Box::new(last),
+                        separator: None,
+                    }));
 
-    case1.or(case2).map(|((name, colon), schema_type)| {
-        SyntaxNode::NameAndTypeDeclaration(Box::new(name), colon, Box::new(schema_type))
+                    SyntaxNode::SyntaxList(SyntaxList { elements })
+                }),
+        )
+        .then(token(SyntaxKind::CloseBraceToken))
+        .map(|((open_brace, pairs), close_brace)| {
+            let pairs = match pairs {
+                SyntaxNode::SyntaxList(list) => list,
+                _ => unreachable!(),
+            };
+
+            SyntaxNode::JsonObjectExpression(JsonObjectExpression {
+                open_brace: Box::new(open_brace),
+                pairs,
+                close_brace: Box::new(close_brace),
+            })
+        })
+}
+
+fn json_pair<'a>()
+-> impl Parser<'a, &'a [LexicalToken], SyntaxNode, extra::Err<Rich<'a, LexicalToken>>> + Clone {
+    string_literal()
+        .then(token(SyntaxKind::ColonToken))
+        .then(json_value())
+        .map(|((key, colon), value)| {
+            SyntaxNode::JsonPair(JsonPair {
+                key: Box::new(key),
+                colon: Box::new(colon),
+                value: Box::new(value),
+            })
+        })
+}
+
+fn json_value<'a>()
+-> impl Parser<'a, &'a [LexicalToken], SyntaxNode, extra::Err<Rich<'a, LexicalToken>>> + Clone {
+    recursive(|value| {        
+        let number = json_number();
+        let boolean = boolean_literal();
+        let object = json_object();
+
+        choice((number, boolean, object))
     })
 }
 
-fn schema_type<'a>() -> impl Parser<'a, &'a [LexicalToken], SyntaxNode> {
-    schema_asterisk_type().or(schema_multipart_type())
-}
-
-fn schema_asterisk_type<'a>() -> impl Parser<'a, &'a [LexicalToken], SyntaxNode> {
-    token(SyntaxKind::OpenParenToken)
-        .then(star_expression())
-        .then(token(SyntaxKind::CloseParenToken))
-        .map(|((open_paren, star), close_paren)| {
-            SyntaxNode::SchemaTypeExpression(
-                open_paren,
-                Box::new(SyntaxNode::SyntaxList(vec![star])),
-                close_paren,
-            )
+fn json_number<'a>()
+-> impl Parser<'a, &'a [LexicalToken], SyntaxNode, extra::Err<Rich<'a, LexicalToken>>> + Clone {
+    token(SyntaxKind::MinusToken)
+        .or_not()
+        .then(long_literal().or(real_literal()))
+        .map(|(unary_op, value)| {
+            SyntaxNode::PrefixUnaryExpression(PrefixUnaryExpression {
+                kind: SyntaxKind::UnaryMinusExpression,
+                operator: unary_op.map(Box::new),
+                expression: Box::new(value),
+            })
         })
 }
 
-fn schema_multipart_type<'a>() -> impl Parser<'a, &'a [LexicalToken], SyntaxNode> {
-    token(SyntaxKind::OpenParenToken)
-        .then(
-            name_and_type_declaration()
-                .separated_by(token(SyntaxKind::CommaToken))
-                .allow_trailing()
-                .collect::<Vec<_>>()
-                .map(SyntaxNode::SyntaxList),
-        )
-        .then(token(SyntaxKind::CloseParenToken))
-        .map(|((open_paren, columns), close_paren)| {
-            SyntaxNode::SchemaTypeExpression(open_paren, Box::new(columns), close_paren)
+fn boolean_literal<'a>()
+-> impl Parser<'a, &'a [LexicalToken], SyntaxNode, extra::Err<Rich<'a, LexicalToken>>> + Clone {
+    token(SyntaxKind::BooleanLiteralToken).map(|token| {
+        SyntaxNode::LiteralExpression(LiteralExpression {
+            kind: SyntaxKind::BooleanLiteralExpression,
+            token: Box::new(token),
         })
-        .boxed()
+    })
 }
 
-fn extended_name_declaration<'a>() -> impl Parser<'a, &'a [LexicalToken], SyntaxNode> {
-    identifier_name_declaration().or(bracketed_name_declaration())
-    // TODO: ExtendedKeywordAsIdentifierNameDeclaration
-}
-
-fn bracketed_name_declaration<'a>() -> impl Parser<'a, &'a [LexicalToken], SyntaxNode> {
-    token(SyntaxKind::OpenBracketToken)
-        .then(string_or_compound_string_literal())
-        .then(token(SyntaxKind::CloseBracketToken))
-        .map(|((open_bracket, name), close_bracket)| {
-            SyntaxNode::BracketedNameDeclaration(open_bracket, Box::new(name), close_bracket)
+fn long_literal<'a>()
+-> impl Parser<'a, &'a [LexicalToken], SyntaxNode, extra::Err<Rich<'a, LexicalToken>>> + Clone {
+    token(SyntaxKind::LongLiteralToken).map(|token| {
+        SyntaxNode::LiteralExpression(LiteralExpression {
+            kind: SyntaxKind::LongLiteralExpression,
+            token: Box::new(token),
         })
+    })
 }
 
-fn identifier_name_declaration<'a>() -> impl Parser<'a, &'a [LexicalToken], SyntaxNode> {
-    token(SyntaxKind::IdentifierToken).map(SyntaxNode::NameDeclaration)
-}
-
-fn string_or_compound_string_literal<'a>() -> impl Parser<'a, &'a [LexicalToken], SyntaxNode> {
-    token(SyntaxKind::StringLiteralToken)
-        .repeated()
-        .at_least(1)
-        .collect()
-        .map(|tokens: Vec<LexicalToken>| {
-            if tokens.len() == 1 {
-                SyntaxNode::StringLiteralExpression(tokens[0].clone())
-            } else {
-                SyntaxNode::CompoundStringLiteralExpression(tokens)
-            }
+fn real_literal<'a>()
+-> impl Parser<'a, &'a [LexicalToken], SyntaxNode, extra::Err<Rich<'a, LexicalToken>>> + Clone {
+    token(SyntaxKind::RealLiteralToken).map(|token| {
+        SyntaxNode::LiteralExpression(LiteralExpression {
+            kind: SyntaxKind::RealLiteralExpression,
+            token: Box::new(token),
         })
+    })
 }
 
-fn param_type<'a>() -> impl Parser<'a, &'a [LexicalToken], SyntaxNode> {
-    token(SyntaxKind::BoolKeyword)
-        .or(token(SyntaxKind::DateTimeKeyword))
-        .or(token(SyntaxKind::DecimalKeyword))
-        .or(token(SyntaxKind::DynamicKeyword))
-        .or(token(SyntaxKind::GuidKeyword))
-        .or(token(SyntaxKind::IntKeyword))
-        .or(token(SyntaxKind::LongKeyword))
-        .or(token(SyntaxKind::RealKeyword))
-        .or(token(SyntaxKind::StringKeyword))
-        .or(token(SyntaxKind::TimespanKeyword))
-        .map(SyntaxNode::PrimitiveTypeExpression)
-}
-
-fn star_expression<'a>() -> impl Parser<'a, &'a [LexicalToken], SyntaxNode> {
-    token(SyntaxKind::AsteriskToken).map(|token| SyntaxNode::StarExpression(token))
+fn string_literal<'a>()
+-> impl Parser<'a, &'a [LexicalToken], SyntaxNode, extra::Err<Rich<'a, LexicalToken>>> + Clone {
+    token(SyntaxKind::StringLiteralToken).map(|token| {
+        SyntaxNode::LiteralExpression(LiteralExpression {
+            kind: SyntaxKind::StringLiteralExpression,
+            token: Box::new(token),
+        })
+    })
 }

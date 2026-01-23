@@ -6,10 +6,16 @@ use kusto_language::{
 
 fn main() {
     let options = ParseOptions::default().with_always_produce_end_tokens(false);
-    let tokens = parse_tokens("name:int", &options);
+    let tokens = parse_tokens("{'A':{'B':1}}", &options);
     let result = query().parse(&tokens);
 
     if let Some(syntax_node) = result.into_output() {
         println!("{:#?}", syntax_node);
     }
+
+    // if result.has_errors() {
+    //     for err in result.into_errors() {
+    //         println!("Error: {:?}", err);
+    //     }
+    // }
 }

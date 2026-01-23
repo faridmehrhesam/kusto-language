@@ -363,6 +363,15 @@ pub enum SyntaxKind {
     DirectiveToken,
     EndOfTextToken,
     BadToken,
+
+    // literal expressions (kinds for LiteralExpression node)
+    BooleanLiteralExpression,
+    LongLiteralExpression,
+    RealLiteralExpression,
+    StringLiteralExpression,
+
+    // unary operators
+    UnaryMinusExpression,
 }
 
 #[derive(Debug, Clone, Copy)]
