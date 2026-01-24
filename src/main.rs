@@ -6,16 +6,17 @@ use kusto_language::{
 
 fn main() {
     let options = ParseOptions::default().with_always_produce_end_tokens(false);
-    let tokens = parse_tokens("{'A':{'B':[1,2,3]}}", &options);
-    let result = query().parse(&tokens);
+    let input = "{ \"key\": true, 'array': [1, 2, 3], \"nested\": { 'innerKey': -3.14 } }";
+    let tokens = parse_tokens(input, &options);
+    let result = query(input).parse(&tokens);
 
-    if let Some(syntax_node) = result.into_output() {
+    if let Some(syntax_node) = result.clone().into_output() {
         println!("{:#?}", syntax_node);
     }
 
-    // if result.has_errors() {
-    //     for err in result.into_errors() {
-    //         println!("Error: {:?}", err);
-    //     }
-    // }
+    if result.has_errors() {
+        for err in result.into_errors() {
+            println!("Error: {:?}", err);
+        }
+    }
 }
