@@ -1,7 +1,7 @@
 use std::ops::Range;
 
 #[derive(Debug, PartialEq, Clone, Copy, Eq)]
-pub enum SyntaxKind {
+pub enum TokenKind {
     // keywords
     __CrossClusterKeyword,
     __CrossDBKeyword,
@@ -393,31 +393,19 @@ impl ParseOptions {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct LexicalToken {
-    kind: SyntaxKind,
-    trivia_span: Range<usize>,
-    text_span: Range<usize>,
+pub struct Token {
+    pub kind: TokenKind,
+    pub trivia_span: Range<usize>,
+    pub text_span: Range<usize>,
 }
 
-impl LexicalToken {
-    pub fn new(kind: SyntaxKind, trivia: Range<usize>, text: Range<usize>) -> Self {
+impl Token {
+    pub fn new(kind: TokenKind, trivia: Range<usize>, text: Range<usize>) -> Self {
         Self {
             kind,
             trivia_span: trivia,
             text_span: text,
         }
-    }
-
-    pub fn kind(&self) -> SyntaxKind {
-        self.kind
-    }
-
-    pub fn trivia_span(&self) -> &Range<usize> {
-        &self.trivia_span
-    }
-
-    pub fn text_span(&self) -> &Range<usize> {
-        &self.text_span
     }
 
     /// Returns total length (trivia + text)

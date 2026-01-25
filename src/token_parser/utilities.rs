@@ -1,5 +1,5 @@
 use crate::token_parser::{
-    SyntaxKind,
+    TokenKind,
     constants::{KEYWORDS, TIMESPAN_SUFFIXES},
 };
 
@@ -74,7 +74,7 @@ pub(crate) fn get_timespan_longest_suffix(bytes: &[u8], start: usize) -> Option<
     None
 }
 
-pub(crate) fn get_longest_keyword(bytes: &[u8], start: usize) -> Option<(usize, SyntaxKind)> {
+pub(crate) fn get_longest_keyword(bytes: &[u8], start: usize) -> Option<(usize, TokenKind)> {
     for keyword in KEYWORDS {
         let len = keyword.0.len();
         if bytes.get(start..start + len) == Some(keyword.0) {
@@ -85,21 +85,19 @@ pub(crate) fn get_longest_keyword(bytes: &[u8], start: usize) -> Option<(usize, 
     None
 }
 
-pub(crate) fn get_goo_literal_kind_from_keyword_kind(
-    keyword_kind: SyntaxKind,
-) -> Option<SyntaxKind> {
+pub(crate) fn get_goo_literal_kind_from_keyword_kind(keyword_kind: TokenKind) -> Option<TokenKind> {
     match keyword_kind {
-        SyntaxKind::BoolKeyword => Some(SyntaxKind::BooleanLiteralToken),
-        SyntaxKind::DateTimeKeyword | SyntaxKind::DateKeyword => {
-            Some(SyntaxKind::DateTimeLiteralToken)
+        TokenKind::BoolKeyword => Some(TokenKind::BooleanLiteralToken),
+        TokenKind::DateTimeKeyword | TokenKind::DateKeyword => {
+            Some(TokenKind::DateTimeLiteralToken)
         }
-        SyntaxKind::DecimalKeyword => Some(SyntaxKind::DecimalLiteralToken),
-        SyntaxKind::GuidKeyword => Some(SyntaxKind::GuidLiteralToken),
-        SyntaxKind::IntKeyword | SyntaxKind::Int32Keyword => Some(SyntaxKind::IntLiteralToken),
-        SyntaxKind::LongKeyword | SyntaxKind::Int64Keyword => Some(SyntaxKind::LongLiteralToken),
-        SyntaxKind::RealKeyword | SyntaxKind::DoubleKeyword => Some(SyntaxKind::RealLiteralToken),
-        SyntaxKind::TimeKeyword | SyntaxKind::TimespanKeyword => {
-            Some(SyntaxKind::TimespanLiteralToken)
+        TokenKind::DecimalKeyword => Some(TokenKind::DecimalLiteralToken),
+        TokenKind::GuidKeyword => Some(TokenKind::GuidLiteralToken),
+        TokenKind::IntKeyword | TokenKind::Int32Keyword => Some(TokenKind::IntLiteralToken),
+        TokenKind::LongKeyword | TokenKind::Int64Keyword => Some(TokenKind::LongLiteralToken),
+        TokenKind::RealKeyword | TokenKind::DoubleKeyword => Some(TokenKind::RealLiteralToken),
+        TokenKind::TimeKeyword | TokenKind::TimespanKeyword => {
+            Some(TokenKind::TimespanLiteralToken)
         }
         _ => None,
     }
