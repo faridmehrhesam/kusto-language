@@ -1,5 +1,13 @@
 use super::TokenKind;
 
+pub(crate) const UTF8_1_BYTE_MASK: u8 = 0b1000_0000;
+pub(crate) const UTF8_1_BYTE_PATTERN: u8 = 0b0000_0000;
+pub(crate) const UTF8_2_BYTE_MASK: u8 = 0b1110_0000;
+pub(crate) const UTF8_2_BYTE_PATTERN: u8 = 0b1100_0000;
+pub(crate) const UTF8_3_BYTE_MASK: u8 = 0b1111_0000;
+pub(crate) const UTF8_3_BYTE_PATTERN: u8 = 0b1110_0000;
+pub(crate) const UTF8_4_BYTE_MASK: u8 = 0b1111_1000;
+pub(crate) const UTF8_4_BYTE_PATTERN: u8 = 0b1111_0000;
 pub(crate) const AVG_BYTES_PER_TOKEN: usize = 5;
 pub(crate) const MULTI_LINE_STRING_SEQUENCES: &[&[u8]] = &[b"```", b"~~~"];
 pub(crate) const BOOL_LITERALS: &[&[u8]] =
@@ -85,10 +93,7 @@ pub(crate) const KEYWORDS: &[(&[u8], TokenKind)] = &[
         TokenKind::__SourceColumnIndexKeyword,
     ),
     (b"hint.num_partitions", TokenKind::HintDotNumPartitions),
-    (
-        b"rowstore_references",
-        TokenKind::RowstoreReferencesKeyword,
-    ),
+    (b"rowstore_references", TokenKind::RowstoreReferencesKeyword),
     (
         b"unrestrictedviewers",
         TokenKind::UnrestrictedViewersKeyword,

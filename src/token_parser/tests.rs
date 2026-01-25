@@ -74,7 +74,72 @@ fn test_bad_token() {
     let tokens = parse_tokens(input, &options);
 
     assert_eq!(tokens[0].kind, TokenKind::BadToken);
-    assert_eq!(tokens[0].text_span.end - tokens[0].text_span.start, 1);
+    assert_eq!(tokens[0].text_span.end - tokens[0].text_span.start, 2);
+}
+
+#[test]
+fn test_bad_token_utf8_2_byte() {
+    let input = "¿"; // 2-byte UTF-8 character (U+00BF)
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
+    let tokens = parse_tokens(input, &options);
+
+    assert_eq!(tokens[0].kind, TokenKind::BadToken);
+    assert_eq!(tokens[0].text_span.end - tokens[0].text_span.start, 2);
+}
+
+#[test]
+fn test_bad_token_utf8_3_byte() {
+    let input = "€"; // 3-byte UTF-8 character (U+20AC)
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
+    let tokens = parse_tokens(input, &options);
+
+    assert_eq!(tokens[0].kind, TokenKind::BadToken);
+    assert_eq!(tokens[0].text_span.end - tokens[0].text_span.start, 3);
+}
+
+#[test]
+fn test_bad_token_utf8_4_byte() {
+    let input = "𝕏"; // 4-byte UTF-8 character (U+1D54F)
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
+    let tokens = parse_tokens(input, &options);
+
+    assert_eq!(tokens[0].kind, TokenKind::BadToken);
+    assert_eq!(tokens[0].text_span.end - tokens[0].text_span.start, 4);
+}
+
+#[test]
+fn test_multiple_consecutive_bad_tokens() {
+    let input = "¿€𝕏"; // Mix of 2, 3, and 4-byte UTF-8 characters
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
+    let tokens = parse_tokens(input, &options);
+
+    assert_eq!(tokens.len(), 3);
+
+    assert_eq!(tokens[0].kind, TokenKind::BadToken);
+    assert_eq!(tokens[0].text_span.end - tokens[0].text_span.start, 2);
+
+    assert_eq!(tokens[1].kind, TokenKind::BadToken);
+    assert_eq!(tokens[1].text_span.end - tokens[1].text_span.start, 3);
+
+    assert_eq!(tokens[2].kind, TokenKind::BadToken);
+    assert_eq!(tokens[2].text_span.end - tokens[2].text_span.start, 4);
+}
+
+#[test]
+fn test_bad_token_mixed_with_valid_tokens() {
+    let input = "¿ + €";
+    let options = ParseOptions::default().with_always_produce_end_tokens(false);
+    let tokens = parse_tokens(input, &options);
+
+    assert_eq!(tokens.len(), 3);
+
+    assert_eq!(tokens[0].kind, TokenKind::BadToken);
+    assert_eq!(tokens[0].text_span.end - tokens[0].text_span.start, 2);
+
+    assert_eq!(tokens[1].kind, TokenKind::PlusToken);
+
+    assert_eq!(tokens[2].kind, TokenKind::BadToken);
+    assert_eq!(tokens[2].text_span.end - tokens[2].text_span.start, 3);
 }
 
 #[test]
