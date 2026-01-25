@@ -1,19 +1,18 @@
 use super::scanner::*;
 use super::utilities::*;
-use crate::token_parser::{ParseOptions, Token, TokenKind, constants::*};
+use super::{KeywordKind, LiteralKind, ParseOptions, PunctuationKind, TokenKind, constants::*};
 use std::ops::Range;
 
-pub fn parse_tokens(text: &str, options: &ParseOptions) -> Vec<Token> {
+pub fn parse_tokens(text: &str, options: &ParseOptions) -> Vec<TokenKind> {
     let bytes = text.as_bytes();
     // Pre-allocate based on estimation
     let mut tokens = Vec::with_capacity((bytes.len() / AVG_BYTES_PER_TOKEN).max(1));
     let mut pos = 0;
 
-    while let Some((kind, trivia_span, text_span)) = next_token(bytes, pos, options) {
-        let is_eof = kind == TokenKind::EndOfTextToken;
-        let text_content = text[text_span.start..text_span.end].to_string();
-        pos = text_span.end;
-        tokens.push(Token::new(kind, trivia_span, text_span, text_content));
+    while let Some((kind, len)) = next_token(text, bytes, pos, options) {
+        let is_eof = kind == TokenKind::EndOfFile;
+        pos += len;
+        tokens.push(kind);
 
         if is_eof {
             break;
@@ -24,39 +23,53 @@ pub fn parse_tokens(text: &str, options: &ParseOptions) -> Vec<Token> {
 }
 
 fn next_token(
+    text: &str,
     bytes: &[u8],
     start: usize,
     options: &ParseOptions,
-) -> Option<(TokenKind, Range<usize>, Range<usize>)> {
+) -> Option<(TokenKind, usize)> {
     let mut pos = start;
-    let trivia_span = parse_trivia(bytes, start).unwrap_or(start..start);
-    let has_trivia = !trivia_span.is_empty();
+    let trivia_len = scan_trivia(bytes, start).unwrap_or(0);
+    let has_trivia = trivia_len > 0;
 
-    pos += trivia_span.end - trivia_span.start;
+    pos += trivia_len;
 
     if let Some(&byte) = peek(bytes, pos) {
         if !byte.is_ascii_alphanumeric() {
-            if let Some((kind, text_span)) = parse_punctuation(bytes, pos) {
-                return Some((kind, trivia_span, text_span));
+            if let Some((kind, punc_len)) = parse_punctuation(bytes, pos) {
+                return Some((TokenKind::Punctuation(kind), trivia_len + punc_len));
             }
 
             if is_string_literal_start_quote(byte) {
                 if let Some(text_span) = parse_string_literal(bytes, pos) {
-                    return Some((TokenKind::StringLiteralToken, trivia_span, text_span));
+                    let text_len = text_span.end - text_span.start;
+                    return Some((
+                        TokenKind::Literal(LiteralKind::String(text[text_span].to_string())),
+                        trivia_len + text_len,
+                    ));
                 }
             } else if byte == b'@'
                 && let Some(&next_byte) = peek(bytes, pos + 1)
                 && is_string_literal_start_quote(next_byte)
             {
                 if let Some(text_span) = parse_string_literal(bytes, pos) {
-                    return Some((TokenKind::StringLiteralToken, trivia_span, text_span));
+                    let text_len = text_span.end - text_span.start;
+                    return Some((
+                        TokenKind::Literal(LiteralKind::String(text[text_span].to_string())),
+                        trivia_len + text_len,
+                    ));
                 }
             } else if byte == b'#' {
                 let directive_end = get_line_end(bytes, pos);
-                return Some((TokenKind::DirectiveToken, trivia_span, pos..directive_end));
+                let text_span = pos..directive_end;
+                let text_len = text_span.end - text_span.start;
+                return Some((
+                    TokenKind::Directive(text[text_span].to_string()),
+                    trivia_len + text_len,
+                ));
             } else if is_at_end(bytes, pos) {
                 if has_trivia || options.always_produce_end_tokens {
-                    return Some((TokenKind::EndOfTextToken, trivia_span, pos..pos));
+                    return Some((TokenKind::EndOfFile, trivia_len));
                 }
 
                 return None;
@@ -66,10 +79,46 @@ fn next_token(
         if let Some((keyword_len, keyword_kind)) = get_longest_keyword(bytes, pos) {
             if let Some(&next_byte) = peek(bytes, pos + keyword_len)
                 && next_byte == b'('
-                && let Some(goo_kind) = get_goo_literal_kind_from_keyword_kind(keyword_kind)
+                && is_goo_literal_kind(&keyword_kind)
                 && let Some(goo_len) = scan_goo(bytes, pos + keyword_len, options)
             {
-                return Some((goo_kind, trivia_span, pos..pos + keyword_len + goo_len));
+                let text_span = pos..pos + goo_len + keyword_len;
+                let text = text[text_span].to_string();
+                return match keyword_kind {
+                    KeywordKind::Bool => Some((
+                        TokenKind::Literal(LiteralKind::Boolean(text)),
+                        trivia_len + goo_len + keyword_len,
+                    )),
+                    KeywordKind::DateTime | KeywordKind::Date => Some((
+                        TokenKind::Literal(LiteralKind::DateTime(text)),
+                        trivia_len + goo_len + keyword_len,
+                    )),
+                    KeywordKind::Decimal => Some((
+                        TokenKind::Literal(LiteralKind::Decimal(text)),
+                        trivia_len + goo_len + keyword_len,
+                    )),
+                    KeywordKind::Guid => Some((
+                        TokenKind::Literal(LiteralKind::Guid(text)),
+                        trivia_len + goo_len + keyword_len,
+                    )),
+                    KeywordKind::Int | KeywordKind::Int32 => Some((
+                        TokenKind::Literal(LiteralKind::Int(text)),
+                        trivia_len + goo_len + keyword_len,
+                    )),
+                    KeywordKind::Long | KeywordKind::Int64 => Some((
+                        TokenKind::Literal(LiteralKind::Long(text)),
+                        trivia_len + goo_len + keyword_len,
+                    )),
+                    KeywordKind::Real | KeywordKind::Double => Some((
+                        TokenKind::Literal(LiteralKind::Real(text)),
+                        trivia_len + goo_len + keyword_len,
+                    )),
+                    KeywordKind::Time | KeywordKind::Timespan => Some((
+                        TokenKind::Literal(LiteralKind::Timespan(text)),
+                        trivia_len + goo_len + keyword_len,
+                    )),
+                    _ => None,
+                };
             }
 
             let is_keyword = match peek(bytes, pos + keyword_len) {
@@ -78,7 +127,7 @@ fn next_token(
             };
 
             if is_keyword {
-                return Some((keyword_kind, trivia_span, pos..pos + keyword_len));
+                return Some((TokenKind::Keyword(keyword_kind), trivia_len + keyword_len));
             }
         }
 
@@ -91,18 +140,19 @@ fn next_token(
 
                 if is_bool {
                     return Some((
-                        TokenKind::BooleanLiteralToken,
-                        trivia_span,
-                        pos..pos + bool_len,
+                        TokenKind::Literal(LiteralKind::Boolean(
+                            text[pos..pos + bool_len].to_string(),
+                        )),
+                        trivia_len + bool_len,
                     ));
                 }
             }
 
             if let Some(raw_guid_len) = scan_raw_guid_literal(bytes, pos) {
+                let text_span = pos..pos + raw_guid_len;
                 return Some((
-                    TokenKind::RawGuidLiteralToken,
-                    trivia_span,
-                    pos..pos + raw_guid_len,
+                    TokenKind::Literal(LiteralKind::RawGuid(text[text_span].to_string())),
+                    trivia_len + raw_guid_len,
                 ));
             }
 
@@ -113,47 +163,59 @@ fn next_token(
                     && (is_string_literal_start_quote(next_byte) || next_byte == b'@')
                     && let Some(text_span) = parse_string_literal(bytes, pos)
                 {
-                    return Some((TokenKind::StringLiteralToken, trivia_span, text_span));
+                    let text_len = text_span.end - text_span.start;
+                    return Some((
+                        TokenKind::Literal(LiteralKind::String(text[text_span].to_string())),
+                        trivia_len + id_len + text_len,
+                    ));
                 }
 
-                return Some((TokenKind::IdentifierToken, trivia_span, pos..pos + id_len));
+                let text_span = pos..pos + id_len;
+                return Some((
+                    TokenKind::Identifier(text[text_span].to_string()),
+                    trivia_len + id_len,
+                ));
             }
         } else if byte.is_ascii_digit() {
             if let Some(raw_guid_len) = scan_raw_guid_literal(bytes, pos) {
+                let text_span = pos..pos + raw_guid_len;
                 return Some((
-                    TokenKind::RawGuidLiteralToken,
-                    trivia_span,
-                    pos..pos + raw_guid_len,
+                    TokenKind::Literal(LiteralKind::RawGuid(text[text_span].to_string())),
+                    trivia_len + raw_guid_len,
                 ));
             }
             if let Some(real_len) = scan_real_literal(bytes, pos) {
+                let text_span = pos..pos + real_len;
                 return Some((
-                    TokenKind::RealLiteralToken,
-                    trivia_span,
-                    pos..pos + real_len,
+                    TokenKind::Literal(LiteralKind::Real(text[text_span].to_string())),
+                    trivia_len + real_len,
                 ));
             }
             if let Some(timespan_len) = scan_timespan_literal(bytes, pos) {
+                let text_span = pos..pos + timespan_len;
                 return Some((
-                    TokenKind::TimespanLiteralToken,
-                    trivia_span,
-                    pos..pos + timespan_len,
+                    TokenKind::Literal(LiteralKind::Timespan(text[text_span].to_string())),
+                    trivia_len + timespan_len,
                 ));
             }
             if let Some(long_len) = scan_long_literal(bytes, pos) {
+                let text_span = pos..pos + long_len;
                 return Some((
-                    TokenKind::LongLiteralToken,
-                    trivia_span,
-                    pos..pos + long_len,
+                    TokenKind::Literal(LiteralKind::Long(text[text_span].to_string())),
+                    trivia_len + long_len,
                 ));
             }
             if let Some(id_len) = scan_identifier(bytes, pos) {
-                return Some((TokenKind::IdentifierToken, trivia_span, pos..pos + id_len));
+                let text_span = pos..pos + id_len;
+                return Some((
+                    TokenKind::Identifier(text[text_span].to_string()),
+                    trivia_len + id_len,
+                ));
             }
         }
     } else {
         if has_trivia || options.always_produce_end_tokens {
-            return Some((TokenKind::EndOfTextToken, trivia_span, pos..pos));
+            return Some((TokenKind::EndOfFile, trivia_len));
         }
         return None;
     }
@@ -177,32 +239,12 @@ fn next_token(
         1
     };
 
-    Some((TokenKind::BadToken, trivia_span, pos..pos + char_len))
-}
-
-fn parse_trivia(bytes: &[u8], start: usize) -> Option<Range<usize>> {
-    let mut pos = start;
-
-    loop {
-        let before = pos;
-
-        pos += count_while(bytes, pos, |b| b.is_ascii_whitespace());
-
-        // line comment
-        if peek(bytes, pos) == Some(&b'/') && peek(bytes, pos + 1) == Some(&b'/') {
-            if let Some(next_line_start) = get_next_line_start(bytes, pos) {
-                pos = next_line_start;
-            } else {
-                pos = bytes.len();
-            }
-        }
-
-        if pos == before {
-            break;
-        }
-    }
-
-    if pos == start { None } else { Some(start..pos) }
+    let text_span = pos..pos + char_len;
+    let text_len = text_span.end - text_span.start;
+    Some((
+        TokenKind::Bad(text[text_span].to_string()),
+        trivia_len + text_len,
+    ))
 }
 
 fn parse_bool_literal(bytes: &[u8], start: usize) -> Option<usize> {
@@ -215,84 +257,84 @@ fn parse_bool_literal(bytes: &[u8], start: usize) -> Option<usize> {
     None
 }
 
-fn parse_punctuation(bytes: &[u8], start: usize) -> Option<(TokenKind, Range<usize>)> {
+fn parse_punctuation(bytes: &[u8], start: usize) -> Option<(PunctuationKind, usize)> {
     let (kind, width) = match peek(bytes, start)? {
-        b'(' => (TokenKind::OpenParenToken, 1),
-        b')' => (TokenKind::CloseParenToken, 1),
-        b'[' => (TokenKind::OpenBracketToken, 1),
-        b']' => (TokenKind::CloseBracketToken, 1),
-        b'{' => (TokenKind::OpenBraceToken, 1),
-        b'}' => (TokenKind::CloseBraceToken, 1),
-        b'|' => (TokenKind::BarToken, 1),
+        b'(' => (PunctuationKind::OpenParen, 1),
+        b')' => (PunctuationKind::CloseParen, 1),
+        b'[' => (PunctuationKind::OpenBracket, 1),
+        b']' => (PunctuationKind::CloseBracket, 1),
+        b'{' => (PunctuationKind::OpenBrace, 1),
+        b'}' => (PunctuationKind::CloseBrace, 1),
+        b'|' => (PunctuationKind::Bar, 1),
         b'.' => {
             if peek(bytes, start + 1) == Some(&b'.') {
-                (TokenKind::DotDotToken, 2)
+                (PunctuationKind::DotDot, 2)
             } else {
-                (TokenKind::DotToken, 1)
+                (PunctuationKind::Dot, 1)
             }
         }
-        b'+' => (TokenKind::PlusToken, 1),
-        b'-' => (TokenKind::MinusToken, 1),
-        b'*' => (TokenKind::AsteriskToken, 1),
-        b'/' => (TokenKind::SlashToken, 1),
-        b'%' => (TokenKind::PercentToken, 1),
+        b'+' => (PunctuationKind::Plus, 1),
+        b'-' => (PunctuationKind::Minus, 1),
+        b'*' => (PunctuationKind::Asterisk, 1),
+        b'/' => (PunctuationKind::Slash, 1),
+        b'%' => (PunctuationKind::Percent, 1),
         b'<' => {
             let next_byte = peek(bytes, start + 1);
             if next_byte == Some(&b'=') {
-                (TokenKind::LessThanOrEqualToken, 2)
+                (PunctuationKind::LessThanOrEqual, 2)
             } else if next_byte == Some(&b'|') {
-                (TokenKind::LessThanBarToken, 2)
+                (PunctuationKind::LessThanBar, 2)
             } else if next_byte == Some(&b'>') {
-                (TokenKind::LessThanGreaterThanToken, 2)
+                (PunctuationKind::LessThanGreaterThan, 2)
             } else {
-                (TokenKind::LessThanToken, 1)
+                (PunctuationKind::LessThan, 1)
             }
         }
         b'>' => {
             if peek(bytes, start + 1) == Some(&b'=') {
-                (TokenKind::GreaterThanOrEqualToken, 2)
+                (PunctuationKind::GreaterThanOrEqual, 2)
             } else {
-                (TokenKind::GreaterThanToken, 1)
+                (PunctuationKind::GreaterThan, 1)
             }
         }
         b'=' => {
             let next_byte = peek(bytes, start + 1);
             if next_byte == Some(&b'=') {
-                (TokenKind::EqualEqualToken, 2)
+                (PunctuationKind::EqualEqual, 2)
             } else if next_byte == Some(&b'>') {
-                (TokenKind::FatArrowToken, 2)
+                (PunctuationKind::FatArrow, 2)
             } else if next_byte == Some(&b'~') {
-                (TokenKind::EqualTildeToken, 2)
+                (PunctuationKind::EqualTilde, 2)
             } else {
-                (TokenKind::EqualToken, 1)
+                (PunctuationKind::Equal, 1)
             }
         }
         b'!' => {
             let next_byte = peek(bytes, start + 1);
             if next_byte == Some(&b'=') {
-                (TokenKind::BangEqualToken, 2)
+                (PunctuationKind::BangEqual, 2)
             } else if next_byte == Some(&b'~') {
-                (TokenKind::BangTildeToken, 2)
+                (PunctuationKind::BangTilde, 2)
             } else {
                 return None;
             }
         }
-        b':' => (TokenKind::ColonToken, 1),
-        b';' => (TokenKind::SemicolonToken, 1),
-        b',' => (TokenKind::CommaToken, 1),
+        b':' => (PunctuationKind::Colon, 1),
+        b';' => (PunctuationKind::Semicolon, 1),
+        b',' => (PunctuationKind::Comma, 1),
         b'@' => {
             if let Some(&b) = peek(bytes, start + 1)
                 && is_string_literal_start_quote(b)
             {
                 return None;
             }
-            (TokenKind::AtToken, 1)
+            (PunctuationKind::At, 1)
         }
-        b'?' => (TokenKind::QuestionToken, 1),
+        b'?' => (PunctuationKind::Question, 1),
         _ => return None,
     };
 
-    Some((kind, start..start + width))
+    Some((kind, width))
 }
 
 fn parse_string_literal(bytes: &[u8], start: usize) -> Option<Range<usize>> {

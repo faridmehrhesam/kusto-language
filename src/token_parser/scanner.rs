@@ -2,6 +2,35 @@ use crate::token_parser::ParseOptions;
 
 use super::utilities::*;
 
+pub(crate) fn scan_trivia(bytes: &[u8], start: usize) -> Option<usize> {
+    let mut pos = start;
+
+    loop {
+        let before = pos;
+
+        pos += count_while(bytes, pos, |b| b.is_ascii_whitespace());
+
+        // line comment
+        if peek(bytes, pos) == Some(&b'/') && peek(bytes, pos + 1) == Some(&b'/') {
+            if let Some(next_line_start) = get_next_line_start(bytes, pos) {
+                pos = next_line_start;
+            } else {
+                pos = bytes.len();
+            }
+        }
+
+        if pos == before {
+            break;
+        }
+    }
+
+    if pos == start {
+        None
+    } else {
+        Some(pos - start)
+    }
+}
+
 pub(crate) fn scan_goo(bytes: &[u8], start: usize, options: &ParseOptions) -> Option<usize> {
     let byte = *peek(bytes, start)?;
     let mut pos = start;
