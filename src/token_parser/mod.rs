@@ -8,4 +8,4 @@ mod utilities;
 mod tests;
 
 pub use parser::parse_tokens;
-pub use types::{LexicalToken, ParseOptions, SyntaxKind};
+pub use types::{ParseOptions, Token, TokenKind};
