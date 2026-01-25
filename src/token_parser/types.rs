@@ -397,14 +397,21 @@ pub struct Token {
     pub kind: TokenKind,
     pub trivia_span: Range<usize>,
     pub text_span: Range<usize>,
+    pub text_content: String,
 }
 
 impl Token {
-    pub fn new(kind: TokenKind, trivia: Range<usize>, text: Range<usize>) -> Self {
+    pub fn new(
+        kind: TokenKind,
+        trivia_span: Range<usize>,
+        text_span: Range<usize>,
+        text_content: String,
+    ) -> Self {
         Self {
             kind,
-            trivia_span: trivia,
-            text_span: text,
+            trivia_span,
+            text_span,
+            text_content,
         }
     }
 

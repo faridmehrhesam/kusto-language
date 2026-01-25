@@ -1,9 +1,6 @@
 use super::scanner::*;
 use super::utilities::*;
-use crate::token_parser::{
-    ParseOptions, Token, TokenKind,
-    constants::{AVG_BYTES_PER_TOKEN, BOOL_LITERALS, MULTI_LINE_STRING_SEQUENCES},
-};
+use crate::token_parser::{ParseOptions, Token, TokenKind, constants::*};
 use std::ops::Range;
 
 pub fn parse_tokens(text: &str, options: &ParseOptions) -> Vec<Token> {
@@ -12,10 +9,11 @@ pub fn parse_tokens(text: &str, options: &ParseOptions) -> Vec<Token> {
     let mut tokens = Vec::with_capacity((bytes.len() / AVG_BYTES_PER_TOKEN).max(1));
     let mut pos = 0;
 
-    while let Some(token) = next_token(bytes, pos, options) {
-        let is_eof = token.kind == TokenKind::EndOfTextToken;
-        pos += token.len();
-        tokens.push(token);
+    while let Some((kind, trivia_span, text_span)) = next_token(bytes, pos, options) {
+        let is_eof = kind == TokenKind::EndOfTextToken;
+        let text_content = text[text_span.start..text_span.end].to_string();
+        pos = text_span.end;
+        tokens.push(Token::new(kind, trivia_span, text_span, text_content));
 
         if is_eof {
             break;
@@ -25,40 +23,40 @@ pub fn parse_tokens(text: &str, options: &ParseOptions) -> Vec<Token> {
     tokens
 }
 
-fn next_token(bytes: &[u8], start: usize, options: &ParseOptions) -> Option<Token> {
+fn next_token(
+    bytes: &[u8],
+    start: usize,
+    options: &ParseOptions,
+) -> Option<(TokenKind, Range<usize>, Range<usize>)> {
     let mut pos = start;
-    let trivia = parse_trivia(bytes, start).unwrap_or(start..start);
-    let has_trivia = !trivia.is_empty();
+    let trivia_span = parse_trivia(bytes, start).unwrap_or(start..start);
+    let has_trivia = !trivia_span.is_empty();
 
-    pos += trivia.end - trivia.start;
+    pos += trivia_span.end - trivia_span.start;
 
     if let Some(&byte) = peek(bytes, pos) {
         if !byte.is_ascii_alphanumeric() {
-            if let Some((kind, range)) = parse_punctuation(bytes, pos) {
-                return Some(Token::new(kind, trivia, range));
+            if let Some((kind, text_span)) = parse_punctuation(bytes, pos) {
+                return Some((kind, trivia_span, text_span));
             }
 
             if is_string_literal_start_quote(byte) {
-                if let Some(range) = parse_string_literal(bytes, pos) {
-                    return Some(Token::new(TokenKind::StringLiteralToken, trivia, range));
+                if let Some(text_span) = parse_string_literal(bytes, pos) {
+                    return Some((TokenKind::StringLiteralToken, trivia_span, text_span));
                 }
             } else if byte == b'@'
                 && let Some(&next_byte) = peek(bytes, pos + 1)
                 && is_string_literal_start_quote(next_byte)
             {
-                if let Some(range) = parse_string_literal(bytes, pos) {
-                    return Some(Token::new(TokenKind::StringLiteralToken, trivia, range));
+                if let Some(text_span) = parse_string_literal(bytes, pos) {
+                    return Some((TokenKind::StringLiteralToken, trivia_span, text_span));
                 }
             } else if byte == b'#' {
                 let directive_end = get_line_end(bytes, pos);
-                return Some(Token::new(
-                    TokenKind::DirectiveToken,
-                    trivia,
-                    pos..directive_end,
-                ));
+                return Some((TokenKind::DirectiveToken, trivia_span, pos..directive_end));
             } else if is_at_end(bytes, pos) {
                 if has_trivia || options.always_produce_end_tokens {
-                    return Some(Token::new(TokenKind::EndOfTextToken, trivia, pos..pos));
+                    return Some((TokenKind::EndOfTextToken, trivia_span, pos..pos));
                 }
 
                 return None;
@@ -71,11 +69,7 @@ fn next_token(bytes: &[u8], start: usize, options: &ParseOptions) -> Option<Toke
                 && let Some(goo_kind) = get_goo_literal_kind_from_keyword_kind(keyword_kind)
                 && let Some(goo_len) = scan_goo(bytes, pos + keyword_len, options)
             {
-                return Some(Token::new(
-                    goo_kind,
-                    trivia,
-                    pos..pos + keyword_len + goo_len,
-                ));
+                return Some((goo_kind, trivia_span, pos..pos + keyword_len + goo_len));
             }
 
             let is_keyword = match peek(bytes, pos + keyword_len) {
@@ -84,7 +78,7 @@ fn next_token(bytes: &[u8], start: usize, options: &ParseOptions) -> Option<Toke
             };
 
             if is_keyword {
-                return Some(Token::new(keyword_kind, trivia, pos..pos + keyword_len));
+                return Some((keyword_kind, trivia_span, pos..pos + keyword_len));
             }
         }
 
@@ -96,18 +90,18 @@ fn next_token(bytes: &[u8], start: usize, options: &ParseOptions) -> Option<Toke
                 };
 
                 if is_bool {
-                    return Some(Token::new(
+                    return Some((
                         TokenKind::BooleanLiteralToken,
-                        trivia,
+                        trivia_span,
                         pos..pos + bool_len,
                     ));
                 }
             }
 
             if let Some(raw_guid_len) = scan_raw_guid_literal(bytes, pos) {
-                return Some(Token::new(
+                return Some((
                     TokenKind::RawGuidLiteralToken,
-                    trivia,
+                    trivia_span,
                     pos..pos + raw_guid_len,
                 ));
             }
@@ -117,62 +111,73 @@ fn next_token(bytes: &[u8], start: usize, options: &ParseOptions) -> Option<Toke
                     && (byte == b'h' || byte == b'H')
                     && let Some(&next_byte) = peek(bytes, pos + 1)
                     && (is_string_literal_start_quote(next_byte) || next_byte == b'@')
-                    && let Some(range) = parse_string_literal(bytes, pos)
+                    && let Some(text_span) = parse_string_literal(bytes, pos)
                 {
-                    return Some(Token::new(TokenKind::StringLiteralToken, trivia, range));
+                    return Some((TokenKind::StringLiteralToken, trivia_span, text_span));
                 }
 
-                return Some(Token::new(
-                    TokenKind::IdentifierToken,
-                    trivia,
-                    pos..pos + id_len,
-                ));
+                return Some((TokenKind::IdentifierToken, trivia_span, pos..pos + id_len));
             }
         } else if byte.is_ascii_digit() {
             if let Some(raw_guid_len) = scan_raw_guid_literal(bytes, pos) {
-                return Some(Token::new(
+                return Some((
                     TokenKind::RawGuidLiteralToken,
-                    trivia,
+                    trivia_span,
                     pos..pos + raw_guid_len,
                 ));
             }
             if let Some(real_len) = scan_real_literal(bytes, pos) {
-                return Some(Token::new(
+                return Some((
                     TokenKind::RealLiteralToken,
-                    trivia,
+                    trivia_span,
                     pos..pos + real_len,
                 ));
             }
             if let Some(timespan_len) = scan_timespan_literal(bytes, pos) {
-                return Some(Token::new(
+                return Some((
                     TokenKind::TimespanLiteralToken,
-                    trivia,
+                    trivia_span,
                     pos..pos + timespan_len,
                 ));
             }
             if let Some(long_len) = scan_long_literal(bytes, pos) {
-                return Some(Token::new(
+                return Some((
                     TokenKind::LongLiteralToken,
-                    trivia,
+                    trivia_span,
                     pos..pos + long_len,
                 ));
             }
             if let Some(id_len) = scan_identifier(bytes, pos) {
-                return Some(Token::new(
-                    TokenKind::IdentifierToken,
-                    trivia,
-                    pos..pos + id_len,
-                ));
+                return Some((TokenKind::IdentifierToken, trivia_span, pos..pos + id_len));
             }
         }
     } else {
         if has_trivia || options.always_produce_end_tokens {
-            return Some(Token::new(TokenKind::EndOfTextToken, trivia, pos..pos));
+            return Some((TokenKind::EndOfTextToken, trivia_span, pos..pos));
         }
         return None;
     }
 
-    Some(Token::new(TokenKind::BadToken, trivia, pos..pos + 1))
+    // Get the length of the UTF-8 character at pos to avoid splitting multi-byte characters
+    // Use UTF-8 leading byte pattern to determine character length
+    let char_len = if !is_at_end(bytes, pos) {
+        let byte = bytes[pos];
+        if byte & UTF8_1_BYTE_MASK == UTF8_1_BYTE_PATTERN {
+            1 // ASCII (0xxxxxxx)
+        } else if byte & UTF8_2_BYTE_MASK == UTF8_2_BYTE_PATTERN {
+            2 // 2-byte (110xxxxx)
+        } else if byte & UTF8_3_BYTE_MASK == UTF8_3_BYTE_PATTERN {
+            3 // 3-byte (1110xxxx)
+        } else if byte & UTF8_4_BYTE_MASK == UTF8_4_BYTE_PATTERN {
+            4 // 4-byte (11110xxx)
+        } else {
+            1 // Invalid UTF-8, treat as single byte
+        }
+    } else {
+        1
+    };
+
+    Some((TokenKind::BadToken, trivia_span, pos..pos + char_len))
 }
 
 fn parse_trivia(bytes: &[u8], start: usize) -> Option<Range<usize>> {
