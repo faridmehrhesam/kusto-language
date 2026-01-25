@@ -1,7 +1,7 @@
 use super::scanner::*;
 use super::utilities::*;
 use crate::token_parser::{ParseOptions, Token, TokenKind, constants::*};
-use std::{ops::Range, str};
+use std::ops::Range;
 
 pub fn parse_tokens(text: &str, options: &ParseOptions) -> Vec<Token> {
     let bytes = text.as_bytes();
