@@ -1,5 +1,5 @@
 use crate::token_parser::{
-    TokenKind,
+    KeywordKind,
     constants::{KEYWORDS, TIMESPAN_SUFFIXES},
 };
 
@@ -31,6 +31,25 @@ pub(crate) fn is_identifier_start_char(byte: u8) -> bool {
 #[inline(always)]
 pub(crate) fn is_identifier_char(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || byte == b'_'
+}
+
+pub(crate) fn is_goo_literal_kind(keyword_kind: &KeywordKind) -> bool {
+    matches!(
+        keyword_kind,
+        KeywordKind::Bool
+            | KeywordKind::DateTime
+            | KeywordKind::Date
+            | KeywordKind::Decimal
+            | KeywordKind::Guid
+            | KeywordKind::Int
+            | KeywordKind::Int32
+            | KeywordKind::Long
+            | KeywordKind::Int64
+            | KeywordKind::Real
+            | KeywordKind::Double
+            | KeywordKind::Time
+            | KeywordKind::Timespan
+    )
 }
 
 pub(crate) fn count_while<F>(bytes: &[u8], start: usize, predicate: F) -> usize
@@ -74,7 +93,7 @@ pub(crate) fn get_timespan_longest_suffix(bytes: &[u8], start: usize) -> Option<
     None
 }
 
-pub(crate) fn get_longest_keyword(bytes: &[u8], start: usize) -> Option<(usize, TokenKind)> {
+pub(crate) fn get_longest_keyword(bytes: &[u8], start: usize) -> Option<(usize, KeywordKind)> {
     for keyword in KEYWORDS {
         let len = keyword.0.len();
         if bytes.get(start..start + len) == Some(keyword.0) {
@@ -83,24 +102,6 @@ pub(crate) fn get_longest_keyword(bytes: &[u8], start: usize) -> Option<(usize, 
     }
 
     None
-}
-
-pub(crate) fn get_goo_literal_kind_from_keyword_kind(keyword_kind: TokenKind) -> Option<TokenKind> {
-    match keyword_kind {
-        TokenKind::BoolKeyword => Some(TokenKind::BooleanLiteralToken),
-        TokenKind::DateTimeKeyword | TokenKind::DateKeyword => {
-            Some(TokenKind::DateTimeLiteralToken)
-        }
-        TokenKind::DecimalKeyword => Some(TokenKind::DecimalLiteralToken),
-        TokenKind::GuidKeyword => Some(TokenKind::GuidLiteralToken),
-        TokenKind::IntKeyword | TokenKind::Int32Keyword => Some(TokenKind::IntLiteralToken),
-        TokenKind::LongKeyword | TokenKind::Int64Keyword => Some(TokenKind::LongLiteralToken),
-        TokenKind::RealKeyword | TokenKind::DoubleKeyword => Some(TokenKind::RealLiteralToken),
-        TokenKind::TimeKeyword | TokenKind::TimespanKeyword => {
-            Some(TokenKind::TimespanLiteralToken)
-        }
-        _ => None,
-    }
 }
 
 fn get_line_len(bytes: &[u8], start: usize, include_line_break: bool) -> usize {
