@@ -8,3 +8,4 @@ authors = ["Hesam Farid Mehr <faridmehr.hesam@gmail.com>"]
 edition = "2024"
 
 [dependencies]
+chumsky = "0.12.0"
