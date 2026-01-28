@@ -1,5 +1,3 @@
-use std::fmt::Debug;
-
 #[derive(Debug, PartialEq, Clone)]
 pub enum BinOpKind {
     Multiply,

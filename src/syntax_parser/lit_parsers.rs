@@ -5,7 +5,7 @@ use crate::{
 };
 use chumsky::{prelude::*, primitive::select};
 
-// TODO: DateTime, Deimal, Guid, Int, String, TimeSpan to be added later
+// TODO: DateTime, Decimal, Guid, Int, String, TimeSpan to be added later
 // TODO: Currently we only support literals not goo literals like int(123)
 
 pub(crate) fn boolean_lit<'a>() -> parser_return!(LitExprKind) {
