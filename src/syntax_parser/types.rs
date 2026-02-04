@@ -23,6 +23,11 @@ pub enum SyntaxKind {
 #[derive(Debug, PartialEq, Clone)]
 pub enum ExprKind {
     Literal(LitExprKind),
+    NameDecl(String),
+    SimpleNamed {
+        name: Box<ExprKind>,
+        expr: Box<ExprKind>,
+    },
     BinOp {
         left: Box<ExprKind>,
         op: BinOpKind,
@@ -35,4 +40,5 @@ pub enum LitExprKind {
     Boolean(bool),
     Long(i64),
     Real(f64),
+    String(String),
 }
