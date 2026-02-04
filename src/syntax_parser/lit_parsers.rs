@@ -5,7 +5,7 @@ use crate::{
 };
 use chumsky::{prelude::*, primitive::select};
 
-// TODO: DateTime, Decimal, Guid, Int, String, TimeSpan to be added later
+// TODO: DateTime, Decimal, Guid, Int, TimeSpan to be added later
 // TODO: Currently we only support literals not goo literals like int(123)
 
 pub(crate) fn boolean_lit<'a>() -> parser_return!(LitExprKind) {
@@ -63,4 +63,16 @@ pub(crate) fn real_lit<'a>() -> parser_return!(LitExprKind) {
             }
         }
     })
+}
+
+// TODO: Handle escape sequences in string literals
+pub(crate) fn string_lit<'a>() -> parser_return!(LitExprKind) {
+    select(|token, _| match token {
+        TokenKind::Literal(LiteralKind::String(value)) => Some(value),
+        _ => None,
+    })
+    .repeated()
+    .at_least(1)
+    .collect()
+    .map(|tokens: Vec<String>| LitExprKind::String(tokens.concat()))
 }

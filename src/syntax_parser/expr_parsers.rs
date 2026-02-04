@@ -1,9 +1,11 @@
 use crate::{
     parser_return,
-    syntax_parser::{lit_parsers::*, types::*, utilities::*},
+    syntax_parser::{
+        constants::EXTENDED_KEYWORDS_AS_IDENTIFIERS, lit_parsers::*, types::*, utilities::*,
+    },
     token_parser::{KeywordKind, PunctuationKind, TokenKind},
 };
-use chumsky::prelude::*;
+use chumsky::{prelude::*, primitive::select};
 
 // TODO: In, InCs, NotIn, NotInCs, HasAny, HasAll, Between and NotBetween operators to be added later
 // TODO: Start expression ( * == value) to be added later
@@ -12,6 +14,7 @@ pub(crate) fn lit_expr<'a>() -> parser_return!(ExprKind) {
     boolean_lit()
         .or(long_lit())
         .or(real_lit())
+        .or(string_lit())
         .map(ExprKind::Literal)
 }
 
@@ -136,4 +139,51 @@ pub(crate) fn logical_or_expr<'a>() -> parser_return!(ExprKind) {
 
 pub(crate) fn unnamed_expr<'a>() -> parser_return!(ExprKind) {
     logical_or_expr()
+}
+
+pub(crate) fn iden_name_decl_expr<'a>() -> parser_return!(ExprKind) {
+    select(|token, _| match token {
+        TokenKind::Identifier(value) => Some(ExprKind::NameDecl(value)),
+        _ => None,
+    })
+}
+
+//TODO: ClientParameterReferenceExpr to be added later
+
+pub(crate) fn bracketed_name_decl_expr<'a>() -> parser_return!(ExprKind) {
+    punct_token(PunctuationKind::OpenBracket)
+        .ignore_then(string_lit())
+        .then_ignore(punct_token(PunctuationKind::CloseBracket))
+        .map(|lit| match lit {
+            LitExprKind::String(value) => ExprKind::NameDecl(value),
+            _ => panic!("Bracketed name must be a string literal"),
+        })
+}
+
+pub(crate) fn ext_kw_as_iden_name_decl_expr<'a>() -> parser_return!(ExprKind) {
+    select(|token, _| match token {
+        TokenKind::Keyword(value) => EXTENDED_KEYWORDS_AS_IDENTIFIERS
+            .iter()
+            .find(|kw| value == kw.0)
+            .map(|kw| ExprKind::NameDecl(kw.1.to_string())),
+        _ => None,
+    })
+}
+
+pub(crate) fn ext_name_decl_expr<'a>() -> parser_return!(ExprKind) {
+    iden_name_decl_expr()
+        .or(bracketed_name_decl_expr())
+        .or(ext_kw_as_iden_name_decl_expr())
+}
+
+// TODO: Dashed name decl to be added later
+
+// TODO: Tuple name decl to be added later
+pub(crate) fn named_expr<'a>() -> parser_return!(ExprKind) {
+    ext_name_decl_expr()
+        .then(punct_token(PunctuationKind::Equal).ignore_then(unnamed_expr()))
+        .map(|(name, expr)| ExprKind::SimpleNamed {
+            name: Box::new(name),
+            expr: Box::new(expr),
+        })
 }

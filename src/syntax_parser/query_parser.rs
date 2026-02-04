@@ -6,7 +6,8 @@ use crate::{
 use chumsky::prelude::*;
 
 pub fn query<'a>() -> parser_return!(SyntaxKind) {
-    unnamed_expr()
+    named_expr()
+        .or(unnamed_expr())
         .then_ignore(just(TokenKind::EndOfFile).or_not())
         .map(SyntaxKind::Expr)
 }

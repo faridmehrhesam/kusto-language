@@ -115,6 +115,24 @@ fn test_real_lit_parser() {
 }
 
 #[test]
+fn test_string_lit_parser() {
+    let tokens = parse_tokens_no_eof("'hello'");
+    let result = string_lit().parse(&tokens);
+    assert!(!result.has_errors());
+    let lit = result.into_output().expect("expected string literal");
+    assert_eq!(lit, LitExprKind::String("'hello'".to_string()));
+}
+
+#[test]
+fn test_string_lit_concat_parser() {
+    let tokens = parse_tokens_no_eof("'a' \"b\"");
+    let result = string_lit().parse(&tokens);
+    assert!(!result.has_errors());
+    let lit = result.into_output().expect("expected concatenated string literal");
+    assert_eq!(lit, LitExprKind::String("'a'\"b\"".to_string()));
+}
+
+#[test]
 fn test_multiplicative_ops() {
     let cases = [
         (
@@ -286,6 +304,51 @@ fn test_unnamed_expr_entry() {
             left: Box::new(ExprKind::Literal(LitExprKind::Long(1))),
             op: BinOpKind::Add,
             right: Box::new(ExprKind::Literal(LitExprKind::Long(2))),
+        }
+    );
+}
+
+#[test]
+fn test_iden_name_decl_expr() {
+    let tokens = parse_tokens_no_eof("Column");
+    let result = iden_name_decl_expr().parse(&tokens);
+    assert!(!result.has_errors());
+    let expr = result.into_output().expect("expected identifier name decl");
+    assert_eq!(expr, ExprKind::NameDecl("Column".to_string()));
+}
+
+#[test]
+fn test_bracketed_name_decl_expr() {
+    let tokens = parse_tokens_no_eof("['col']");
+    let result = bracketed_name_decl_expr().parse(&tokens);
+    assert!(!result.has_errors());
+    let expr = result.into_output().expect("expected bracketed name decl");
+    assert_eq!(expr, ExprKind::NameDecl("'col'".to_string()));
+}
+
+#[test]
+fn test_ext_kw_as_iden_name_decl_expr() {
+    let tokens = parse_tokens_no_eof("where");
+    let result = ext_kw_as_iden_name_decl_expr().parse(&tokens);
+    assert!(!result.has_errors());
+    let expr = result
+        .into_output()
+        .expect("expected extended keyword name decl");
+    assert_eq!(expr, ExprKind::NameDecl("where".to_string()));
+}
+
+#[test]
+fn test_named_expr() {
+    let tokens = parse_tokens_no_eof("where = 1");
+    let result = named_expr().parse(&tokens);
+    assert!(!result.has_errors());
+    let expr = result.into_output().expect("expected named expr");
+
+    assert_eq!(
+        expr,
+        ExprKind::SimpleNamed {
+            name: Box::new(ExprKind::NameDecl("where".to_string())),
+            expr: Box::new(ExprKind::Literal(LitExprKind::Long(1))),
         }
     );
 }
