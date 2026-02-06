@@ -6,145 +6,215 @@ use crate::token_parser::{
 fn test_empty_string() {
     let input = "";
     let options = ParseOptions::default();
-    let tokens = parse_tokens(input, &options);
+    let token_stream = parse_tokens(input, &options);
 
-    assert_eq!(tokens.len(), 1);
-    assert_eq!(tokens[0], TokenKind::EndOfFile);
+    assert_eq!(token_stream.tokens.len(), 1);
+    assert_eq!(token_stream.tokens[0], TokenKind::EndOfFile);
 }
 
 #[test]
 fn test_single_punctuation() {
     let input = "+";
     let options = ParseOptions::default();
-    let tokens = parse_tokens(input, &options);
+    let token_stream = parse_tokens(input, &options);
 
     // Expect: [+] [EOF]
-    assert_eq!(tokens.len(), 2);
-    assert_eq!(tokens[0], TokenKind::Punctuation(PunctuationKind::Plus));
-    assert_eq!(tokens[1], TokenKind::EndOfFile);
+    assert_eq!(token_stream.tokens.len(), 2);
+    assert_eq!(
+        token_stream.tokens[0],
+        TokenKind::Punctuation(PunctuationKind::Plus)
+    );
+    assert_eq!(token_stream.tokens[1], TokenKind::EndOfFile);
 }
 
 #[test]
 fn test_multi_char_punctuation() {
     let input = "<= == => ..";
     let options = ParseOptions::default().with_always_produce_end_tokens(false);
-    let tokens = parse_tokens(input, &options);
+    let token_stream = parse_tokens(input, &options);
 
     assert_eq!(
-        tokens[0],
+        token_stream.tokens[0],
         TokenKind::Punctuation(PunctuationKind::LessThanOrEqual)
     );
     assert_eq!(
-        tokens[1],
+        token_stream.tokens[1],
         TokenKind::Punctuation(PunctuationKind::EqualEqual)
     );
-    assert_eq!(tokens[2], TokenKind::Punctuation(PunctuationKind::FatArrow));
-    assert_eq!(tokens[3], TokenKind::Punctuation(PunctuationKind::DotDot));
+    assert_eq!(
+        token_stream.tokens[2],
+        TokenKind::Punctuation(PunctuationKind::FatArrow)
+    );
+    assert_eq!(
+        token_stream.tokens[3],
+        TokenKind::Punctuation(PunctuationKind::DotDot)
+    );
 }
 
 #[test]
 fn test_trivia_and_comments() {
     let input = "  // this is a comment\n  +  ";
     let options = ParseOptions::default().with_always_produce_end_tokens(false);
-    let tokens = parse_tokens(input, &options);
+    let token_stream = parse_tokens(input, &options);
 
-    assert_eq!(tokens[0], TokenKind::Punctuation(PunctuationKind::Plus));
-    assert_eq!(tokens[1], TokenKind::EndOfFile);
+    assert_eq!(
+        token_stream.tokens[0],
+        TokenKind::Punctuation(PunctuationKind::Plus)
+    );
+    assert_eq!(token_stream.tokens[1], TokenKind::EndOfFile);
 }
 
 #[test]
 fn test_bad_token() {
     let input = "این یک متن فارسی است"; // Non-ASCII
     let options = ParseOptions::default().with_always_produce_end_tokens(false);
-    let tokens = parse_tokens(input, &options);
+    let token_stream = parse_tokens(input, &options);
+    let span = match &token_stream.tokens[0] {
+        TokenKind::Bad(span) => span,
+        other => panic!("Expected Bad token, got {:?}", other),
+    };
 
-    assert_eq!(tokens[0], TokenKind::Bad("ا".to_string()));
+    assert_eq!(token_stream.slice(span), "ا");
 }
 
 #[test]
 fn test_bad_token_utf8_2_byte() {
     let input = "¿"; // 2-byte UTF-8 character (U+00BF)
     let options = ParseOptions::default().with_always_produce_end_tokens(false);
-    let tokens = parse_tokens(input, &options);
+    let token_stream = parse_tokens(input, &options);
+    let span = match &token_stream.tokens[0] {
+        TokenKind::Bad(span) => span,
+        other => panic!("Expected Bad token, got {:?}", other),
+    };
 
-    assert_eq!(tokens[0], TokenKind::Bad("¿".to_string()));
+    assert_eq!(token_stream.slice(span), "¿");
 }
 
 #[test]
 fn test_bad_token_utf8_3_byte() {
     let input = "€"; // 3-byte UTF-8 character (U+20AC)
     let options = ParseOptions::default().with_always_produce_end_tokens(false);
-    let tokens = parse_tokens(input, &options);
+    let token_stream = parse_tokens(input, &options);
+    let span = match &token_stream.tokens[0] {
+        TokenKind::Bad(span) => span,
+        other => panic!("Expected Bad token, got {:?}", other),
+    };
 
-    assert_eq!(tokens[0], TokenKind::Bad("€".to_string()));
+    assert_eq!(token_stream.slice(span), "€");
 }
 
 #[test]
 fn test_bad_token_utf8_4_byte() {
     let input = "𝕏"; // 4-byte UTF-8 character (U+1D54F)
     let options = ParseOptions::default().with_always_produce_end_tokens(false);
-    let tokens = parse_tokens(input, &options);
+    let token_stream = parse_tokens(input, &options);
+    let span = match &token_stream.tokens[0] {
+        TokenKind::Bad(span) => span,
+        other => panic!("Expected Bad token, got {:?}", other),
+    };
 
-    assert_eq!(tokens[0], TokenKind::Bad("𝕏".to_string()));
+    assert_eq!(token_stream.slice(span), "𝕏");
 }
 
 #[test]
 fn test_multiple_consecutive_bad_tokens() {
     let input = "¿€𝕏"; // Mix of 2, 3, and 4-byte UTF-8 characters
     let options = ParseOptions::default().with_always_produce_end_tokens(false);
-    let tokens = parse_tokens(input, &options);
+    let token_stream = parse_tokens(input, &options);
 
-    assert_eq!(tokens.len(), 3);
-    assert_eq!(tokens[0], TokenKind::Bad("¿".to_string()));
-    assert_eq!(tokens[1], TokenKind::Bad("€".to_string()));
-    assert_eq!(tokens[2], TokenKind::Bad("𝕏".to_string()));
+    assert_eq!(token_stream.tokens.len(), 3);
+    assert_eq!(
+        token_stream.slice(match &token_stream.tokens[0] {
+            TokenKind::Bad(span) => span,
+            other => panic!("Expected Bad token, got {:?}", other),
+        }),
+        "¿"
+    );
+    assert_eq!(
+        token_stream.slice(match &token_stream.tokens[1] {
+            TokenKind::Bad(span) => span,
+            other => panic!("Expected Bad token, got {:?}", other),
+        }),
+        "€"
+    );
+    assert_eq!(
+        token_stream.slice(match &token_stream.tokens[2] {
+            TokenKind::Bad(span) => span,
+            other => panic!("Expected Bad token, got {:?}", other),
+        }),
+        "𝕏"
+    );
 }
 
 #[test]
 fn test_bad_token_mixed_with_valid_tokens() {
     let input = "¿ + €";
     let options = ParseOptions::default().with_always_produce_end_tokens(false);
-    let tokens = parse_tokens(input, &options);
+    let token_stream = parse_tokens(input, &options);
 
-    assert_eq!(tokens.len(), 3);
+    assert_eq!(token_stream.tokens.len(), 3);
 
-    assert_eq!(tokens[0], TokenKind::Bad("¿".to_string()));
-    assert_eq!(tokens[1], TokenKind::Punctuation(PunctuationKind::Plus));
-    assert_eq!(tokens[2], TokenKind::Bad("€".to_string()));
+    assert_eq!(
+        token_stream.slice(match &token_stream.tokens[0] {
+            TokenKind::Bad(span) => span,
+            other => panic!("Expected Bad token, got {:?}", other),
+        }),
+        "¿"
+    );
+    assert_eq!(
+        token_stream.tokens[1],
+        TokenKind::Punctuation(PunctuationKind::Plus)
+    );
+    assert_eq!(
+        token_stream.slice(match &token_stream.tokens[2] {
+            TokenKind::Bad(span) => span,
+            other => panic!("Expected Bad token, got {:?}", other),
+        }),
+        "€"
+    );
 }
 
 #[test]
 fn test_complex_punctuation_chain() {
     let input = "!=!~<|<?";
     let options = ParseOptions::default();
-    let tokens = parse_tokens(input, &options);
+    let token_stream = parse_tokens(input, &options);
 
-    assert_eq!(tokens.len(), 6);
+    assert_eq!(token_stream.tokens.len(), 6);
     assert_eq!(
-        tokens[0],
+        token_stream.tokens[0],
         TokenKind::Punctuation(PunctuationKind::BangEqual)
     );
     assert_eq!(
-        tokens[1],
+        token_stream.tokens[1],
         TokenKind::Punctuation(PunctuationKind::BangTilde)
     );
     assert_eq!(
-        tokens[2],
+        token_stream.tokens[2],
         TokenKind::Punctuation(PunctuationKind::LessThanBar)
     );
-    assert_eq!(tokens[3], TokenKind::Punctuation(PunctuationKind::LessThan));
-    assert_eq!(tokens[4], TokenKind::Punctuation(PunctuationKind::Question));
-    assert_eq!(tokens[5], TokenKind::EndOfFile);
+    assert_eq!(
+        token_stream.tokens[3],
+        TokenKind::Punctuation(PunctuationKind::LessThan)
+    );
+    assert_eq!(
+        token_stream.tokens[4],
+        TokenKind::Punctuation(PunctuationKind::Question)
+    );
+    assert_eq!(token_stream.tokens[5], TokenKind::EndOfFile);
 }
 
 #[test]
 fn test_options_no_end_tokens() {
     let input = "+";
     let options = ParseOptions::default().with_always_produce_end_tokens(false);
-    let tokens = parse_tokens(input, &options);
+    let token_stream = parse_tokens(input, &options);
 
-    assert_eq!(tokens.len(), 1);
-    assert_eq!(tokens[0], TokenKind::Punctuation(PunctuationKind::Plus));
+    assert_eq!(token_stream.tokens.len(), 1);
+    assert_eq!(
+        token_stream.tokens[0],
+        TokenKind::Punctuation(PunctuationKind::Plus)
+    );
 }
 
 #[test]
@@ -153,7 +223,7 @@ fn test_all_possible_punctuations() {
     let options = ParseOptions::default()
         .with_always_produce_end_tokens(false)
         .with_always_produce_end_tokens(false);
-    let tokens = parse_tokens(input, &options);
+    let token_stream = parse_tokens(input, &options);
     let expected_kinds = vec![
         TokenKind::Punctuation(PunctuationKind::OpenParen),
         TokenKind::Punctuation(PunctuationKind::CloseParen),
@@ -189,18 +259,18 @@ fn test_all_possible_punctuations() {
     ];
 
     assert_eq!(
-        tokens.len(),
+        token_stream.tokens.len(),
         expected_kinds.len(),
         "Token count mismatch. Expected {}, got {}",
         expected_kinds.len(),
-        tokens.len()
+        token_stream.tokens.len()
     );
 
     for (i, expected_kind) in expected_kinds.iter().enumerate() {
         assert_eq!(
-            tokens[i], *expected_kind,
+            token_stream.tokens[i], *expected_kind,
             "Mismatch at index {}: expected {:?}, but found {:?}",
-            i, expected_kind, tokens[i]
+            i, expected_kind, token_stream.tokens[i]
         );
     }
 }
@@ -209,25 +279,40 @@ fn test_all_possible_punctuations() {
 fn test_directive() {
     let input = "#crp query_language=kql";
     let options = ParseOptions::default().with_always_produce_end_tokens(false);
-    let tokens = parse_tokens(input, &options);
+    let token_stream = parse_tokens(input, &options);
 
-    assert_eq!(tokens.len(), 1);
-    assert_eq!(tokens[0], TokenKind::Directive(input.to_string()));
+    assert_eq!(token_stream.tokens.len(), 1);
+    assert_eq!(
+        token_stream.slice(match &token_stream.tokens[0] {
+            TokenKind::Directive(span) => span,
+            other => panic!("Expected Directive token, got {:?}", other),
+        }),
+        input
+    );
 }
 
 #[test]
 fn test_directive_with_other_tokens() {
     let input = " + #crp query_language=kql\n +";
     let options = ParseOptions::default().with_always_produce_end_tokens(false);
-    let tokens = parse_tokens(input, &options);
+    let token_stream = parse_tokens(input, &options);
 
-    assert_eq!(tokens.len(), 3);
-    assert_eq!(tokens[0], TokenKind::Punctuation(PunctuationKind::Plus));
+    assert_eq!(token_stream.tokens.len(), 3);
     assert_eq!(
-        tokens[1],
-        TokenKind::Directive("#crp query_language=kql".to_string())
+        token_stream.tokens[0],
+        TokenKind::Punctuation(PunctuationKind::Plus)
     );
-    assert_eq!(tokens[2], TokenKind::Punctuation(PunctuationKind::Plus));
+    assert_eq!(
+        token_stream.slice(match &token_stream.tokens[1] {
+            TokenKind::Directive(span) => span,
+            other => panic!("Expected Directive token, got {:?}", other),
+        }),
+        "#crp query_language=kql"
+    );
+    assert_eq!(
+        token_stream.tokens[2],
+        TokenKind::Punctuation(PunctuationKind::Plus)
+    );
 }
 
 #[test]
@@ -239,10 +324,16 @@ fn test_identifier() {
 
     for input in possible_inputs {
         let options = ParseOptions::default().with_always_produce_end_tokens(false);
-        let tokens = parse_tokens(input, &options);
+        let token_stream = parse_tokens(input, &options);
 
-        assert_eq!(tokens.len(), 1, "{input}");
-        assert_eq!(tokens[0], TokenKind::Identifier(input.to_string()));
+        assert_eq!(token_stream.tokens.len(), 1, "{input}");
+        assert_eq!(
+            token_stream.slice(match &token_stream.tokens[0] {
+                TokenKind::Identifier(span) => span,
+                other => panic!("Expected Identifier token, got {:?}", other),
+            }),
+            input
+        );
     }
 }
 
@@ -256,12 +347,15 @@ fn test_raw_guid_literal() {
 
     for input in possible_inputs {
         let options = ParseOptions::default().with_always_produce_end_tokens(false);
-        let tokens = parse_tokens(input, &options);
+        let token_stream = parse_tokens(input, &options);
 
-        assert_eq!(tokens.len(), 1, "{input}");
+        assert_eq!(token_stream.tokens.len(), 1, "{input}");
         assert_eq!(
-            tokens[0],
-            TokenKind::Literal(LiteralKind::RawGuid(input.to_string()))
+            token_stream.slice(match &token_stream.tokens[0] {
+                TokenKind::Literal(LiteralKind::RawGuid(span)) => span,
+                other => panic!("Expected RawGuid token, got {:?}", other),
+            }),
+            input
         );
     }
 }
@@ -275,12 +369,15 @@ fn test_real_literal() {
 
     for input in possible_inputs {
         let options = ParseOptions::default().with_always_produce_end_tokens(false);
-        let tokens = parse_tokens(input, &options);
+        let token_stream = parse_tokens(input, &options);
 
-        assert_eq!(tokens.len(), 1, "{input}");
+        assert_eq!(token_stream.tokens.len(), 1, "{input}");
         assert_eq!(
-            tokens[0],
-            TokenKind::Literal(LiteralKind::Real(input.to_string()))
+            token_stream.slice(match &token_stream.tokens[0] {
+                TokenKind::Literal(LiteralKind::Real(span)) => span,
+                other => panic!("Expected Real token, got {:?}", other),
+            }),
+            input
         );
     }
 }
@@ -327,12 +424,15 @@ fn test_timespan_literal() {
 
     for input in possible_inputs {
         let options = ParseOptions::default().with_always_produce_end_tokens(false);
-        let tokens = parse_tokens(input, &options);
+        let token_stream = parse_tokens(input, &options);
 
-        assert_eq!(tokens.len(), 1, "{input}");
+        assert_eq!(token_stream.tokens.len(), 1, "{input}");
         assert_eq!(
-            tokens[0],
-            TokenKind::Literal(LiteralKind::Timespan(input.to_string()))
+            token_stream.slice(match &token_stream.tokens[0] {
+                TokenKind::Literal(LiteralKind::Timespan(span)) => span,
+                other => panic!("Expected Timespan token, got {:?}", other),
+            }),
+            input
         );
     }
 }
@@ -349,12 +449,15 @@ fn test_long_literal() {
 
     for input in possible_inputs {
         let options = ParseOptions::default().with_always_produce_end_tokens(false);
-        let tokens = parse_tokens(input, &options);
+        let token_stream = parse_tokens(input, &options);
 
-        assert_eq!(tokens.len(), 1, "{input}");
+        assert_eq!(token_stream.tokens.len(), 1, "{input}");
         assert_eq!(
-            tokens[0],
-            TokenKind::Literal(LiteralKind::Long(input.to_string()))
+            token_stream.slice(match &token_stream.tokens[0] {
+                TokenKind::Literal(LiteralKind::Long(span)) => span,
+                other => panic!("Expected Long token, got {:?}", other),
+            }),
+            input
         );
     }
 }
@@ -393,12 +496,15 @@ fn test_string_literal() {
 
     for input in possible_inputs {
         let options = ParseOptions::default().with_always_produce_end_tokens(false);
-        let tokens = parse_tokens(input, &options);
+        let token_stream = parse_tokens(input, &options);
 
-        assert_eq!(tokens.len(), 1, "{input}");
+        assert_eq!(token_stream.tokens.len(), 1, "{input}");
         assert_eq!(
-            tokens[0],
-            TokenKind::Literal(LiteralKind::String(input.to_string()))
+            token_stream.slice(match &token_stream.tokens[0] {
+                TokenKind::Literal(LiteralKind::String(span)) => span,
+                other => panic!("Expected String token, got {:?}", other),
+            }),
+            input
         );
     }
 }
@@ -416,11 +522,13 @@ fn test_unclosed_string() {
 
     for input in inputs {
         let options = ParseOptions::default().with_always_produce_end_tokens(false);
-        let tokens = parse_tokens(input, &options);
+        let token_stream = parse_tokens(input, &options);
 
-        assert_ne!(
-            tokens[0],
-            TokenKind::Literal(LiteralKind::String(input.to_string())),
+        assert!(
+            !matches!(
+                token_stream.tokens[0],
+                TokenKind::Literal(LiteralKind::String(_))
+            ),
             "{input}"
         );
     }
@@ -436,13 +544,11 @@ fn test_string_with_invalid_escape() {
 
     for input in inputs {
         let options = ParseOptions::default().with_always_produce_end_tokens(false);
-        let tokens = parse_tokens(input, &options);
+        let token_stream = parse_tokens(input, &options);
 
-        assert_ne!(
-            tokens[0],
-            TokenKind::Literal(LiteralKind::String(input.to_string())),
-            "{input}"
-        );
+        if let TokenKind::Literal(LiteralKind::String(span)) = &token_stream.tokens[0] {
+            assert_ne!(token_stream.slice(span), input, "{input}");
+        }
     }
 }
 
@@ -450,12 +556,11 @@ fn test_string_with_invalid_escape() {
 fn test_escape_at_eof() {
     let input = r#""string\""#;
     let options = ParseOptions::default().with_always_produce_end_tokens(false);
-    let tokens = parse_tokens(input, &options);
+    let token_stream = parse_tokens(input, &options);
 
-    assert_ne!(
-        tokens[0],
-        TokenKind::Literal(LiteralKind::String(input.to_string()))
-    );
+    if let TokenKind::Literal(LiteralKind::String(span)) = &token_stream.tokens[0] {
+        assert_ne!(token_stream.slice(span), input);
+    }
 }
 
 #[test]
@@ -470,14 +575,15 @@ fn test_string_with_valid_escape_sequences() {
 
     for input in inputs {
         let options = ParseOptions::default().with_always_produce_end_tokens(false);
-        let tokens = parse_tokens(input, &options);
+        let token_stream = parse_tokens(input, &options);
 
-        assert_eq!(tokens.len(), 1, "{input}");
-        assert_eq!(
-            tokens[0],
-            TokenKind::Literal(LiteralKind::String(input.to_string())),
-            "{input}"
-        );
+        assert_eq!(token_stream.tokens.len(), 1, "{input}");
+        match &token_stream.tokens[0] {
+            TokenKind::Literal(LiteralKind::String(span)) => {
+                assert_eq!(token_stream.slice(span), input, "{input}");
+            }
+            other => panic!("Expected String token, got {:?}", other),
+        }
     }
 }
 
@@ -491,14 +597,15 @@ fn test_verbatim_string_escaping() {
 
     for input in inputs {
         let options = ParseOptions::default().with_always_produce_end_tokens(false);
-        let tokens = parse_tokens(input, &options);
+        let token_stream = parse_tokens(input, &options);
 
-        assert_eq!(tokens.len(), 1, "{input}");
-        assert_eq!(
-            tokens[0],
-            TokenKind::Literal(LiteralKind::String(input.to_string())),
-            "{input}"
-        );
+        assert_eq!(token_stream.tokens.len(), 1, "{input}");
+        match &token_stream.tokens[0] {
+            TokenKind::Literal(LiteralKind::String(span)) => {
+                assert_eq!(token_stream.slice(span), input, "{input}");
+            }
+            other => panic!("Expected String token, got {:?}", other),
+        }
     }
 }
 
@@ -506,13 +613,12 @@ fn test_verbatim_string_escaping() {
 fn test_string_terminates_at_newline() {
     let input = "\"string with\nunfinished line";
     let options = ParseOptions::default().with_always_produce_end_tokens(false);
-    let tokens = parse_tokens(input, &options);
+    let token_stream = parse_tokens(input, &options);
 
     // String should terminate at newline, making it invalid
-    assert_ne!(
-        tokens[0],
-        TokenKind::Literal(LiteralKind::String(input.to_string()))
-    );
+    if let TokenKind::Literal(LiteralKind::String(span)) = &token_stream.tokens[0] {
+        assert_ne!(token_stream.slice(span), input);
+    }
 }
 
 #[test]
@@ -521,13 +627,15 @@ fn test_bool_literal() {
 
     for input in possible_inputs {
         let options = ParseOptions::default().with_always_produce_end_tokens(false);
-        let tokens = parse_tokens(input, &options);
+        let token_stream = parse_tokens(input, &options);
 
-        assert_eq!(tokens.len(), 1, "{input}");
-        assert_eq!(
-            tokens[0],
-            TokenKind::Literal(LiteralKind::Boolean(input.to_string()))
-        );
+        assert_eq!(token_stream.tokens.len(), 1, "{input}");
+        match &token_stream.tokens[0] {
+            TokenKind::Literal(LiteralKind::Boolean(span)) => {
+                assert_eq!(token_stream.slice(span), input);
+            }
+            other => panic!("Expected Boolean token, got {:?}", other),
+        }
     }
 }
 
@@ -550,10 +658,13 @@ fn test_simple_keywords() {
 
     for (input, expected_kind) in test_cases {
         let options = ParseOptions::default().with_always_produce_end_tokens(false);
-        let tokens = parse_tokens(input, &options);
+        let token_stream = parse_tokens(input, &options);
 
-        assert_eq!(tokens.len(), 1, "Failed for keyword: {input}");
-        assert_eq!(tokens[0], expected_kind, "Wrong kind for keyword: {input}");
+        assert_eq!(token_stream.tokens.len(), 1, "Failed for keyword: {input}");
+        assert_eq!(
+            token_stream.tokens[0], expected_kind,
+            "Wrong kind for keyword: {input}"
+        );
     }
 }
 
@@ -575,11 +686,15 @@ fn test_type_keywords() {
 
     for (input, expected_kind) in test_cases {
         let options = ParseOptions::default().with_always_produce_end_tokens(false);
-        let tokens = parse_tokens(input, &options);
+        let token_stream = parse_tokens(input, &options);
 
-        assert_eq!(tokens.len(), 1, "Failed for type keyword: {input}");
         assert_eq!(
-            tokens[0], expected_kind,
+            token_stream.tokens.len(),
+            1,
+            "Failed for type keyword: {input}"
+        );
+        assert_eq!(
+            token_stream.tokens[0], expected_kind,
             "Wrong kind for type keyword: {input}"
         );
     }
@@ -608,10 +723,13 @@ fn test_long_keywords() {
 
     for (input, expected_kind) in test_cases {
         let options = ParseOptions::default().with_always_produce_end_tokens(false);
-        let tokens = parse_tokens(input, &options);
+        let token_stream = parse_tokens(input, &options);
 
-        assert_eq!(tokens.len(), 1, "Failed for keyword: {input}");
-        assert_eq!(tokens[0], expected_kind, "Wrong kind for keyword: {input}");
+        assert_eq!(token_stream.tokens.len(), 1, "Failed for keyword: {input}");
+        assert_eq!(
+            token_stream.tokens[0], expected_kind,
+            "Wrong kind for keyword: {input}"
+        );
     }
 }
 
@@ -635,29 +753,55 @@ fn test_keyword_with_special_chars() {
 
     for (input, expected_kind) in test_cases {
         let options = ParseOptions::default().with_always_produce_end_tokens(false);
-        let tokens = parse_tokens(input, &options);
+        let token_stream = parse_tokens(input, &options);
 
-        assert_eq!(tokens.len(), 1, "Failed for keyword: {input}");
-        assert_eq!(tokens[0], expected_kind, "Wrong kind for keyword: {input}");
+        assert_eq!(token_stream.tokens.len(), 1, "Failed for keyword: {input}");
+        assert_eq!(
+            token_stream.tokens[0], expected_kind,
+            "Wrong kind for keyword: {input}"
+        );
     }
 }
 
 #[test]
 fn test_keyword_boundary_detection() {
     // Keywords should not match if followed by identifier characters
+    enum ExpectedToken<'a> {
+        Keyword(KeywordKind),
+        Identifier(&'a str),
+    }
+
     let test_cases = vec![
-        ("letx", TokenKind::Identifier("letx".to_string())),
-        ("where_col", TokenKind::Identifier("where_col".to_string())),
-        ("int32", TokenKind::Keyword(KeywordKind::Int32)), // This is actually a different keyword
-        ("datetime2", TokenKind::Identifier("datetime2".to_string())),
+        ("letx", ExpectedToken::Identifier("letx")),
+        ("where_col", ExpectedToken::Identifier("where_col")),
+        ("int32", ExpectedToken::Keyword(KeywordKind::Int32)), // This is actually a different keyword
+        ("datetime2", ExpectedToken::Identifier("datetime2")),
     ];
 
     for (input, expected_kind) in test_cases {
         let options = ParseOptions::default().with_always_produce_end_tokens(false);
-        let tokens = parse_tokens(input, &options);
+        let token_stream = parse_tokens(input, &options);
 
-        assert_eq!(tokens.len(), 1, "Failed for input: {input}");
-        assert_eq!(tokens[0], expected_kind, "Wrong kind for input: {input}");
+        assert_eq!(token_stream.tokens.len(), 1, "Failed for input: {input}");
+        match expected_kind {
+            ExpectedToken::Keyword(kind) => {
+                assert_eq!(
+                    token_stream.tokens[0],
+                    TokenKind::Keyword(kind),
+                    "Wrong kind for input: {input}"
+                );
+            }
+            ExpectedToken::Identifier(expected) => match &token_stream.tokens[0] {
+                TokenKind::Identifier(span) => {
+                    assert_eq!(
+                        token_stream.slice(span),
+                        expected,
+                        "Wrong kind for input: {input}"
+                    );
+                }
+                other => panic!("Expected Identifier token, got {:?}", other),
+            },
+        }
     }
 }
 
@@ -665,15 +809,23 @@ fn test_keyword_boundary_detection() {
 fn test_keyword_followed_by_punctuation() {
     let input = "let x = 5";
     let options = ParseOptions::default().with_always_produce_end_tokens(false);
-    let tokens = parse_tokens(input, &options);
+    let token_stream = parse_tokens(input, &options);
 
-    assert_eq!(tokens[0], TokenKind::Keyword(KeywordKind::Let));
-    assert_eq!(tokens[1], TokenKind::Identifier("x".to_string()));
-    assert_eq!(tokens[2], TokenKind::Punctuation(PunctuationKind::Equal));
+    assert_eq!(token_stream.tokens[0], TokenKind::Keyword(KeywordKind::Let));
+    match &token_stream.tokens[1] {
+        TokenKind::Identifier(span) => assert_eq!(token_stream.slice(span), "x"),
+        other => panic!("Expected Identifier token, got {:?}", other),
+    }
     assert_eq!(
-        tokens[3],
-        TokenKind::Literal(LiteralKind::Long("5".to_string()))
+        token_stream.tokens[2],
+        TokenKind::Punctuation(PunctuationKind::Equal)
     );
+    match &token_stream.tokens[3] {
+        TokenKind::Literal(LiteralKind::Long(span)) => {
+            assert_eq!(token_stream.slice(span), "5");
+        }
+        other => panic!("Expected Long token, got {:?}", other),
+    }
 }
 
 #[test]
@@ -691,10 +843,13 @@ fn test_longest_keyword_match() {
 
     for (input, expected_kind) in test_cases {
         let options = ParseOptions::default().with_always_produce_end_tokens(false);
-        let tokens = parse_tokens(input, &options);
+        let token_stream = parse_tokens(input, &options);
 
-        assert_eq!(tokens.len(), 1, "Failed for input: {input}");
-        assert_eq!(tokens[0], expected_kind, "Wrong kind for input: {input}");
+        assert_eq!(token_stream.tokens.len(), 1, "Failed for input: {input}");
+        assert_eq!(
+            token_stream.tokens[0], expected_kind,
+            "Wrong kind for input: {input}"
+        );
     }
 }
 
@@ -704,139 +859,157 @@ fn test_longest_keyword_match() {
 fn test_goo_int_literal() {
     let input = "int(42)";
     let options = ParseOptions::default().with_always_produce_end_tokens(false);
-    let tokens = parse_tokens(input, &options);
+    let token_stream = parse_tokens(input, &options);
 
-    assert_eq!(tokens.len(), 1);
-    assert_eq!(
-        tokens[0],
-        TokenKind::Literal(LiteralKind::Int(input.to_string()))
-    );
+    assert_eq!(token_stream.tokens.len(), 1);
+    match &token_stream.tokens[0] {
+        TokenKind::Literal(LiteralKind::Int(span)) => {
+            assert_eq!(token_stream.slice(span), input);
+        }
+        other => panic!("Expected Int token, got {:?}", other),
+    }
 }
 
 #[test]
 fn test_goo_long_literal() {
     let input = "long(123456789)";
     let options = ParseOptions::default().with_always_produce_end_tokens(false);
-    let tokens = parse_tokens(input, &options);
+    let token_stream = parse_tokens(input, &options);
 
-    assert_eq!(tokens.len(), 1);
-    assert_eq!(
-        tokens[0],
-        TokenKind::Literal(LiteralKind::Long(input.to_string()))
-    );
+    assert_eq!(token_stream.tokens.len(), 1);
+    match &token_stream.tokens[0] {
+        TokenKind::Literal(LiteralKind::Long(span)) => {
+            assert_eq!(token_stream.slice(span), input);
+        }
+        other => panic!("Expected Long token, got {:?}", other),
+    }
 }
 
 #[test]
 fn test_goo_datetime_literal() {
     let input = "datetime(2024-01-01T12:00:00Z)";
     let options = ParseOptions::default().with_always_produce_end_tokens(false);
-    let tokens = parse_tokens(input, &options);
+    let token_stream = parse_tokens(input, &options);
 
-    assert_eq!(tokens.len(), 1);
-    assert_eq!(
-        tokens[0],
-        TokenKind::Literal(LiteralKind::DateTime(input.to_string()))
-    );
+    assert_eq!(token_stream.tokens.len(), 1);
+    match &token_stream.tokens[0] {
+        TokenKind::Literal(LiteralKind::DateTime(span)) => {
+            assert_eq!(token_stream.slice(span), input);
+        }
+        other => panic!("Expected DateTime token, got {:?}", other),
+    }
 }
 
 #[test]
 fn test_goo_timespan_literal() {
     let input = "timespan(1d)";
     let options = ParseOptions::default().with_always_produce_end_tokens(false);
-    let tokens = parse_tokens(input, &options);
+    let token_stream = parse_tokens(input, &options);
 
-    assert_eq!(tokens.len(), 1);
-    assert_eq!(
-        tokens[0],
-        TokenKind::Literal(LiteralKind::Timespan(input.to_string()))
-    );
+    assert_eq!(token_stream.tokens.len(), 1);
+    match &token_stream.tokens[0] {
+        TokenKind::Literal(LiteralKind::Timespan(span)) => {
+            assert_eq!(token_stream.slice(span), input);
+        }
+        other => panic!("Expected Timespan token, got {:?}", other),
+    }
 }
 
 #[test]
 fn test_goo_real_literal() {
     let input = "real(3.14159)";
     let options = ParseOptions::default().with_always_produce_end_tokens(false);
-    let tokens = parse_tokens(input, &options);
+    let token_stream = parse_tokens(input, &options);
 
-    assert_eq!(tokens.len(), 1);
-    assert_eq!(
-        tokens[0],
-        TokenKind::Literal(LiteralKind::Real(input.to_string()))
-    );
+    assert_eq!(token_stream.tokens.len(), 1);
+    match &token_stream.tokens[0] {
+        TokenKind::Literal(LiteralKind::Real(span)) => {
+            assert_eq!(token_stream.slice(span), input);
+        }
+        other => panic!("Expected Real token, got {:?}", other),
+    }
 }
 
 #[test]
 fn test_goo_decimal_literal() {
     let input = "decimal(99.99)";
     let options = ParseOptions::default().with_always_produce_end_tokens(false);
-    let tokens = parse_tokens(input, &options);
+    let token_stream = parse_tokens(input, &options);
 
-    assert_eq!(tokens.len(), 1);
-    assert_eq!(
-        tokens[0],
-        TokenKind::Literal(LiteralKind::Decimal(input.to_string()))
-    );
+    assert_eq!(token_stream.tokens.len(), 1);
+    match &token_stream.tokens[0] {
+        TokenKind::Literal(LiteralKind::Decimal(span)) => {
+            assert_eq!(token_stream.slice(span), input);
+        }
+        other => panic!("Expected Decimal token, got {:?}", other),
+    }
 }
 
 #[test]
 fn test_goo_guid_literal() {
     let input = "guid(12345678-1234-1234-1234-123456789012)";
     let options = ParseOptions::default().with_always_produce_end_tokens(false);
-    let tokens = parse_tokens(input, &options);
+    let token_stream = parse_tokens(input, &options);
 
-    assert_eq!(tokens.len(), 1);
-    assert_eq!(
-        tokens[0],
-        TokenKind::Literal(LiteralKind::Guid(input.to_string()))
-    );
+    assert_eq!(token_stream.tokens.len(), 1);
+    match &token_stream.tokens[0] {
+        TokenKind::Literal(LiteralKind::Guid(span)) => {
+            assert_eq!(token_stream.slice(span), input);
+        }
+        other => panic!("Expected Guid token, got {:?}", other),
+    }
 }
 
 #[test]
 fn test_goo_bool_literal() {
     let input = "bool(true)";
     let options = ParseOptions::default().with_always_produce_end_tokens(false);
-    let tokens = parse_tokens(input, &options);
+    let token_stream = parse_tokens(input, &options);
 
-    assert_eq!(tokens.len(), 1);
-    assert_eq!(
-        tokens[0],
-        TokenKind::Literal(LiteralKind::Boolean(input.to_string()))
-    );
+    assert_eq!(token_stream.tokens.len(), 1);
+    match &token_stream.tokens[0] {
+        TokenKind::Literal(LiteralKind::Boolean(span)) => {
+            assert_eq!(token_stream.slice(span), input);
+        }
+        other => panic!("Expected Boolean token, got {:?}", other),
+    }
 }
 
 #[test]
 fn test_goo_with_whitespace() {
     let input = "int( 42 )";
     let options = ParseOptions::default().with_always_produce_end_tokens(false);
-    let tokens = parse_tokens(input, &options);
+    let token_stream = parse_tokens(input, &options);
 
-    assert_eq!(tokens.len(), 1);
-    assert_eq!(
-        tokens[0],
-        TokenKind::Literal(LiteralKind::Int(input.to_string()))
-    );
+    assert_eq!(token_stream.tokens.len(), 1);
+    match &token_stream.tokens[0] {
+        TokenKind::Literal(LiteralKind::Int(span)) => {
+            assert_eq!(token_stream.slice(span), input);
+        }
+        other => panic!("Expected Int token, got {:?}", other),
+    }
 }
 
 #[test]
 fn test_goo_unclosed_paren() {
     let input = "int(42";
     let options = ParseOptions::default().with_always_produce_end_tokens(false);
-    let tokens = parse_tokens(input, &options);
+    let token_stream = parse_tokens(input, &options);
 
     // Should parse as keyword followed by open paren and number
-    assert!(tokens.len() > 1);
-    assert_eq!(tokens[0], TokenKind::Keyword(KeywordKind::Int));
+    assert!(token_stream.tokens.len() > 1);
+    assert_eq!(token_stream.tokens[0], TokenKind::Keyword(KeywordKind::Int));
 }
 
 #[test]
 fn test_goo_with_line_breaks_not_allowed() {
     let input = "int(\n42\n)";
     let options = ParseOptions::default().with_always_produce_end_tokens(false);
-    let tokens = parse_tokens(input, &options);
+    let token_stream = parse_tokens(input, &options);
 
     // Should not parse as goo literal when line breaks not allowed
-    assert!(tokens.len() > 1);
-    assert_eq!(tokens[0], TokenKind::Keyword(KeywordKind::Int));
+    assert!(token_stream.tokens.len() > 1);
+    assert_eq!(token_stream.tokens[0], TokenKind::Keyword(KeywordKind::Int));
 }
 
 #[test]
@@ -845,28 +1018,35 @@ fn test_goo_with_line_breaks_allowed() {
     let options = ParseOptions::default()
         .with_always_produce_end_tokens(false)
         .with_allow_literals_with_line_breaks(true);
-    let tokens = parse_tokens(input, &options);
+    let token_stream = parse_tokens(input, &options);
 
     // Should parse as goo literal when line breaks allowed
-    assert_eq!(tokens.len(), 1);
-    assert_eq!(
-        tokens[0],
-        TokenKind::Literal(LiteralKind::Int(input.to_string()))
-    );
+    assert_eq!(token_stream.tokens.len(), 1);
+    match &token_stream.tokens[0] {
+        TokenKind::Literal(LiteralKind::Int(span)) => {
+            assert_eq!(token_stream.slice(span), input);
+        }
+        other => panic!("Expected Int token, got {:?}", other),
+    }
 }
 
 #[test]
 fn test_type_keyword_not_followed_by_paren() {
     let input = "int + 5";
     let options = ParseOptions::default().with_always_produce_end_tokens(false);
-    let tokens = parse_tokens(input, &options);
+    let token_stream = parse_tokens(input, &options);
 
-    assert_eq!(tokens[0], TokenKind::Keyword(KeywordKind::Int));
-    assert_eq!(tokens[1], TokenKind::Punctuation(PunctuationKind::Plus));
+    assert_eq!(token_stream.tokens[0], TokenKind::Keyword(KeywordKind::Int));
     assert_eq!(
-        tokens[2],
-        TokenKind::Literal(LiteralKind::Long("5".to_string()))
+        token_stream.tokens[1],
+        TokenKind::Punctuation(PunctuationKind::Plus)
     );
+    match &token_stream.tokens[2] {
+        TokenKind::Literal(LiteralKind::Long(span)) => {
+            assert_eq!(token_stream.slice(span), "5");
+        }
+        other => panic!("Expected Long token, got {:?}", other),
+    }
 }
 
 #[test]
@@ -874,13 +1054,15 @@ fn test_date_keyword_goo() {
     // date() should also create datetime literal
     let input = "date(2024-01-01)";
     let options = ParseOptions::default().with_always_produce_end_tokens(false);
-    let tokens = parse_tokens(input, &options);
+    let token_stream = parse_tokens(input, &options);
 
-    assert_eq!(tokens.len(), 1);
-    assert_eq!(
-        tokens[0],
-        TokenKind::Literal(LiteralKind::DateTime(input.to_string()))
-    );
+    assert_eq!(token_stream.tokens.len(), 1);
+    match &token_stream.tokens[0] {
+        TokenKind::Literal(LiteralKind::DateTime(span)) => {
+            assert_eq!(token_stream.slice(span), input);
+        }
+        other => panic!("Expected DateTime token, got {:?}", other),
+    }
 }
 
 #[test]
@@ -888,35 +1070,40 @@ fn test_time_keyword_goo() {
     // time() should create timespan literal
     let input = "time(1h)";
     let options = ParseOptions::default().with_always_produce_end_tokens(false);
-    let tokens = parse_tokens(input, &options);
+    let token_stream = parse_tokens(input, &options);
 
-    assert_eq!(tokens.len(), 1);
-    assert_eq!(
-        tokens[0],
-        TokenKind::Literal(LiteralKind::Timespan(input.to_string()))
-    );
+    assert_eq!(token_stream.tokens.len(), 1);
+    match &token_stream.tokens[0] {
+        TokenKind::Literal(LiteralKind::Timespan(span)) => {
+            assert_eq!(token_stream.slice(span), input);
+        }
+        other => panic!("Expected Timespan token, got {:?}", other),
+    }
 }
 
 #[test]
 fn test_complex_query_with_keywords() {
     let input = "let x = 5; T | where x > 10 | project col1, col2 | summarize count()";
     let options = ParseOptions::default().with_always_produce_end_tokens(false);
-    let tokens = parse_tokens(input, &options);
+    let token_stream = parse_tokens(input, &options);
 
     // Verify key tokens are present
-    assert_eq!(tokens[0], TokenKind::Keyword(KeywordKind::Let));
+    assert_eq!(token_stream.tokens[0], TokenKind::Keyword(KeywordKind::Let));
     assert!(
-        tokens
+        token_stream
+            .tokens
             .iter()
             .any(|t| *t == TokenKind::Keyword(KeywordKind::Where))
     );
     assert!(
-        tokens
+        token_stream
+            .tokens
             .iter()
             .any(|t| *t == TokenKind::Keyword(KeywordKind::Project))
     );
     assert!(
-        tokens
+        token_stream
+            .tokens
             .iter()
             .any(|t| *t == TokenKind::Keyword(KeywordKind::Summarize))
     );
@@ -945,11 +1132,15 @@ fn test_hint_keywords() {
 
     for (input, expected_kind) in test_cases {
         let options = ParseOptions::default().with_always_produce_end_tokens(false);
-        let tokens = parse_tokens(input, &options);
+        let token_stream = parse_tokens(input, &options);
 
-        assert_eq!(tokens.len(), 1, "Failed for hint keyword: {input}");
         assert_eq!(
-            tokens[0], expected_kind,
+            token_stream.tokens.len(),
+            1,
+            "Failed for hint keyword: {input}"
+        );
+        assert_eq!(
+            token_stream.tokens[0], expected_kind,
             "Wrong kind for hint keyword: {input}"
         );
     }

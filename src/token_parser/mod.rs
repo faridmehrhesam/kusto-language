@@ -8,4 +8,6 @@ mod utilities;
 mod tests;
 
 pub use parser::parse_tokens;
-pub use types::{KeywordKind, LiteralKind, ParseOptions, PunctuationKind, TokenKind};
+pub use types::{
+    KeywordKind, LiteralKind, ParseOptions, PunctuationKind, Span, TokenKind, TokenStream,
+};

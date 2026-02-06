@@ -1,11 +1,34 @@
+pub struct TokenStream<'a> {
+    pub tokens: Vec<TokenKind>,
+    pub source: &'a str,
+}
+
+impl<'a> TokenStream<'a> {
+    pub fn slice(&self, span: &Span) -> &'a str {
+        &self.source[span.start..span.end]
+    }
+}
+
+#[derive(Debug, PartialEq, Clone, Copy, Eq)]
+pub struct Span {
+    pub start: usize,
+    pub end: usize,
+}
+
+impl Span {
+    pub fn len(&self) -> usize {
+        self.end - self.start
+    }
+}
+
 #[derive(Debug, PartialEq, Clone, Eq)]
 pub enum TokenKind {
     Keyword(KeywordKind),
     Punctuation(PunctuationKind),
     Literal(LiteralKind),
-    Identifier(String),
-    Directive(String),
-    Bad(String),
+    Identifier(Span),
+    Directive(Span),
+    Bad(Span),
     EndOfFile,
 }
 
@@ -356,16 +379,16 @@ pub enum PunctuationKind {
 
 #[derive(Debug, PartialEq, Clone, Eq)]
 pub enum LiteralKind {
-    Boolean(String),
-    DateTime(String),
-    Decimal(String),
-    Guid(String),
-    Int(String),
-    Long(String),
-    RawGuid(String),
-    Real(String),
-    Timespan(String),
-    String(String),
+    Boolean(Span),
+    DateTime(Span),
+    Decimal(Span),
+    Guid(Span),
+    Int(Span),
+    Long(Span),
+    RawGuid(Span),
+    Real(Span),
+    Timespan(Span),
+    String(Span),
 }
 
 #[derive(Debug, Clone, Copy)]

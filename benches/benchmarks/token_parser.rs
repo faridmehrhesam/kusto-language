@@ -79,8 +79,9 @@ fn token_parser_tests(c: &mut Criterion) {
     short.throughput(Throughput::Bytes(short_input.len() as u64));
     short.bench_function("parse", |b| {
         b.iter(|| {
-            let tokens = parse_tokens(black_box(short_input), black_box(&options));
-            black_box(tokens.len());
+            let token_stream = parse_tokens(black_box(short_input), black_box(&options));
+            black_box(token_stream.tokens);
+            black_box(token_stream.source);
         });
     });
     short.finish();
@@ -92,8 +93,9 @@ fn token_parser_tests(c: &mut Criterion) {
     long.throughput(Throughput::Bytes(long_input.len() as u64));
     long.bench_function("parse", |b| {
         b.iter(|| {
-            let tokens = parse_tokens(black_box(&long_input), black_box(&options));
-            black_box(tokens.len());
+            let token_stream = parse_tokens(black_box(&long_input), black_box(&options));
+            black_box(token_stream.tokens);
+            black_box(token_stream.source);
         });
     });
     long.finish();

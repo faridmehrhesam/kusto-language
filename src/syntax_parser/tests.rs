@@ -1,16 +1,16 @@
 use super::{expr_parsers::*, lit_parsers::*, types::*};
-use crate::token_parser::{ParseOptions, TokenKind, parse_tokens};
+use crate::token_parser::{ParseOptions, TokenStream, parse_tokens};
 use chumsky::prelude::*;
 
-fn parse_tokens_no_eof(input: &str) -> Vec<TokenKind> {
+fn parse_tokens_no_eof<'a>(input: &'a str) -> TokenStream<'a> {
     let options = ParseOptions::default().with_always_produce_end_tokens(false);
     parse_tokens(input, &options)
 }
 
 #[test]
 fn test_additive_multiplicative_precedence() {
-    let tokens = parse_tokens_no_eof("1 + 2 * 3");
-    let result = additive_expr().parse(&tokens);
+    let token_stream = parse_tokens_no_eof("1 + 2 * 3");
+    let result = additive_expr(token_stream.source).parse(&token_stream.tokens);
     assert!(!result.has_errors());
     let expr = result.into_output().expect("expected additive expr");
 
@@ -30,8 +30,8 @@ fn test_additive_multiplicative_precedence() {
 
 #[test]
 fn test_relational_before_equality() {
-    let tokens = parse_tokens_no_eof("1 < 2 == 3");
-    let result = equality_expr().parse(&tokens);
+    let token_stream = parse_tokens_no_eof("1 < 2 == 3");
+    let result = equality_expr(token_stream.source).parse(&token_stream.tokens);
     assert!(!result.has_errors());
     let expr = result.into_output().expect("expected equality expr");
 
@@ -51,8 +51,8 @@ fn test_relational_before_equality() {
 
 #[test]
 fn test_logical_and_before_or() {
-    let tokens = parse_tokens_no_eof("true and false or true");
-    let result = logical_or_expr().parse(&tokens);
+    let token_stream = parse_tokens_no_eof("true and false or true");
+    let result = logical_or_expr(token_stream.source).parse(&token_stream.tokens);
     assert!(!result.has_errors());
     let expr = result.into_output().expect("expected logical or expr");
 
@@ -79,8 +79,8 @@ fn test_lit_expr_variants() {
     ];
 
     for (input, expected) in cases {
-        let tokens = parse_tokens_no_eof(input);
-        let result = lit_expr().parse(&tokens);
+        let token_stream = parse_tokens_no_eof(input);
+        let result = lit_expr(token_stream.source).parse(&token_stream.tokens);
         assert!(!result.has_errors(), "input: {input}");
         let expr = result.into_output().expect("expected literal expr");
         assert_eq!(expr, expected, "input: {input}");
@@ -89,8 +89,8 @@ fn test_lit_expr_variants() {
 
 #[test]
 fn test_boolean_lit_parser() {
-    let tokens = parse_tokens_no_eof("false");
-    let result = boolean_lit().parse(&tokens);
+    let token_stream = parse_tokens_no_eof("false");
+    let result = boolean_lit(token_stream.source).parse(&token_stream.tokens);
     assert!(!result.has_errors());
     let lit = result.into_output().expect("expected boolean literal");
     assert_eq!(lit, LitExprKind::Boolean(false));
@@ -98,8 +98,8 @@ fn test_boolean_lit_parser() {
 
 #[test]
 fn test_long_lit_parser() {
-    let tokens = parse_tokens_no_eof("42");
-    let result = long_lit().parse(&tokens);
+    let token_stream = parse_tokens_no_eof("42");
+    let result = long_lit(token_stream.source).parse(&token_stream.tokens);
     assert!(!result.has_errors());
     let lit = result.into_output().expect("expected long literal");
     assert_eq!(lit, LitExprKind::Long(42));
@@ -107,8 +107,8 @@ fn test_long_lit_parser() {
 
 #[test]
 fn test_real_lit_parser() {
-    let tokens = parse_tokens_no_eof("3.25");
-    let result = real_lit().parse(&tokens);
+    let token_stream = parse_tokens_no_eof("3.25");
+    let result = real_lit(token_stream.source).parse(&token_stream.tokens);
     assert!(!result.has_errors());
     let lit = result.into_output().expect("expected real literal");
     assert_eq!(lit, LitExprKind::Real(3.25));
@@ -116,8 +116,8 @@ fn test_real_lit_parser() {
 
 #[test]
 fn test_string_lit_parser() {
-    let tokens = parse_tokens_no_eof("'hello'");
-    let result = string_lit().parse(&tokens);
+    let token_stream = parse_tokens_no_eof("'hello'");
+    let result = string_lit(token_stream.source).parse(&token_stream.tokens);
     assert!(!result.has_errors());
     let lit = result.into_output().expect("expected string literal");
     assert_eq!(lit, LitExprKind::String("'hello'".to_string()));
@@ -125,10 +125,12 @@ fn test_string_lit_parser() {
 
 #[test]
 fn test_string_lit_concat_parser() {
-    let tokens = parse_tokens_no_eof("'a' \"b\"");
-    let result = string_lit().parse(&tokens);
+    let token_stream = parse_tokens_no_eof("'a' \"b\"");
+    let result = string_lit(token_stream.source).parse(&token_stream.tokens);
     assert!(!result.has_errors());
-    let lit = result.into_output().expect("expected concatenated string literal");
+    let lit = result
+        .into_output()
+        .expect("expected concatenated string literal");
     assert_eq!(lit, LitExprKind::String("'a'\"b\"".to_string()));
 }
 
@@ -156,8 +158,8 @@ fn test_multiplicative_ops() {
     ];
 
     for (input, op, left, right) in cases {
-        let tokens = parse_tokens_no_eof(input);
-        let result = multiplicative_expr().parse(&tokens);
+        let token_stream = parse_tokens_no_eof(input);
+        let result = multiplicative_expr(token_stream.source).parse(&token_stream.tokens);
         assert!(!result.has_errors(), "input: {input}");
         let expr = result.into_output().expect("expected multiplicative expr");
         assert_eq!(
@@ -190,8 +192,8 @@ fn test_additive_ops() {
     ];
 
     for (input, op, left, right) in cases {
-        let tokens = parse_tokens_no_eof(input);
-        let result = additive_expr().parse(&tokens);
+        let token_stream = parse_tokens_no_eof(input);
+        let result = additive_expr(token_stream.source).parse(&token_stream.tokens);
         assert!(!result.has_errors(), "input: {input}");
         let expr = result.into_output().expect("expected additive expr");
         assert_eq!(
@@ -216,8 +218,8 @@ fn test_relational_ops() {
     ];
 
     for (input, op) in cases {
-        let tokens = parse_tokens_no_eof(input);
-        let result = relational_expr().parse(&tokens);
+        let token_stream = parse_tokens_no_eof(input);
+        let result = relational_expr(token_stream.source).parse(&token_stream.tokens);
         assert!(!result.has_errors(), "input: {input}");
         let expr = result.into_output().expect("expected relational expr");
         assert_eq!(
@@ -241,8 +243,8 @@ fn test_equality_ops() {
     ];
 
     for (input, op) in cases {
-        let tokens = parse_tokens_no_eof(input);
-        let result = equality_expr().parse(&tokens);
+        let token_stream = parse_tokens_no_eof(input);
+        let result = equality_expr(token_stream.source).parse(&token_stream.tokens);
         assert!(!result.has_errors(), "input: {input}");
         let expr = result.into_output().expect("expected equality expr");
         assert_eq!(
@@ -259,8 +261,8 @@ fn test_equality_ops() {
 
 #[test]
 fn test_logical_and_expr() {
-    let tokens = parse_tokens_no_eof("true and false");
-    let result = logical_and_expr().parse(&tokens);
+    let token_stream = parse_tokens_no_eof("true and false");
+    let result = logical_and_expr(token_stream.source).parse(&token_stream.tokens);
     assert!(!result.has_errors());
     let expr = result.into_output().expect("expected logical and expr");
 
@@ -276,8 +278,8 @@ fn test_logical_and_expr() {
 
 #[test]
 fn test_logical_or_expr() {
-    let tokens = parse_tokens_no_eof("true or false");
-    let result = logical_or_expr().parse(&tokens);
+    let token_stream = parse_tokens_no_eof("true or false");
+    let result = logical_or_expr(token_stream.source).parse(&token_stream.tokens);
     assert!(!result.has_errors());
     let expr = result.into_output().expect("expected logical or expr");
 
@@ -293,8 +295,8 @@ fn test_logical_or_expr() {
 
 #[test]
 fn test_unnamed_expr_entry() {
-    let tokens = parse_tokens_no_eof("1 + 2");
-    let result = unnamed_expr().parse(&tokens);
+    let token_stream = parse_tokens_no_eof("1 + 2");
+    let result = unnamed_expr(token_stream.source).parse(&token_stream.tokens);
     assert!(!result.has_errors());
     let expr = result.into_output().expect("expected unnamed expr");
 
@@ -310,8 +312,8 @@ fn test_unnamed_expr_entry() {
 
 #[test]
 fn test_iden_name_decl_expr() {
-    let tokens = parse_tokens_no_eof("Column");
-    let result = iden_name_decl_expr().parse(&tokens);
+    let token_stream = parse_tokens_no_eof("Column");
+    let result = iden_name_decl_expr(token_stream.source).parse(&token_stream.tokens);
     assert!(!result.has_errors());
     let expr = result.into_output().expect("expected identifier name decl");
     assert_eq!(expr, ExprKind::NameDecl("Column".to_string()));
@@ -319,8 +321,8 @@ fn test_iden_name_decl_expr() {
 
 #[test]
 fn test_bracketed_name_decl_expr() {
-    let tokens = parse_tokens_no_eof("['col']");
-    let result = bracketed_name_decl_expr().parse(&tokens);
+    let token_stream = parse_tokens_no_eof("['col']");
+    let result = bracketed_name_decl_expr(token_stream.source).parse(&token_stream.tokens);
     assert!(!result.has_errors());
     let expr = result.into_output().expect("expected bracketed name decl");
     assert_eq!(expr, ExprKind::NameDecl("'col'".to_string()));
@@ -328,8 +330,8 @@ fn test_bracketed_name_decl_expr() {
 
 #[test]
 fn test_ext_kw_as_iden_name_decl_expr() {
-    let tokens = parse_tokens_no_eof("where");
-    let result = ext_kw_as_iden_name_decl_expr().parse(&tokens);
+    let token_stream = parse_tokens_no_eof("where");
+    let result = ext_kw_as_iden_name_decl_expr().parse(&token_stream.tokens);
     assert!(!result.has_errors());
     let expr = result
         .into_output()
@@ -339,8 +341,8 @@ fn test_ext_kw_as_iden_name_decl_expr() {
 
 #[test]
 fn test_named_expr() {
-    let tokens = parse_tokens_no_eof("where = 1");
-    let result = named_expr().parse(&tokens);
+    let token_stream = parse_tokens_no_eof("where = 1");
+    let result = named_expr(token_stream.source).parse(&token_stream.tokens);
     assert!(!result.has_errors());
     let expr = result.into_output().expect("expected named expr");
 

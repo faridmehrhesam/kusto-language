@@ -8,12 +8,14 @@ use chumsky::{prelude::*, primitive::select};
 // TODO: DateTime, Decimal, Guid, Int, TimeSpan to be added later
 // TODO: Currently we only support literals not goo literals like int(123)
 
-pub(crate) fn boolean_lit<'a>() -> parser_return!(LitExprKind) {
+pub(crate) fn boolean_lit<'a>(source: &'a str) -> parser_return!(LitExprKind) {
     select(|token, _| match token {
         TokenKind::Literal(LiteralKind::Boolean(value)) => Some(value),
         _ => None,
     })
-    .validate(|value, e, emitter| {
+    .validate(|span, e, emitter| {
+        let value = &source[span.start..span.end];
+
         match value.parse::<bool>() {
             Ok(val) => LitExprKind::Boolean(val),
             Err(err) => {
@@ -27,12 +29,14 @@ pub(crate) fn boolean_lit<'a>() -> parser_return!(LitExprKind) {
     })
 }
 
-pub(crate) fn long_lit<'a>() -> parser_return!(LitExprKind) {
+pub(crate) fn long_lit<'a>(source: &'a str) -> parser_return!(LitExprKind) {
     select(|token, _| match token {
         TokenKind::Literal(LiteralKind::Long(value)) => Some(value),
         _ => None,
     })
-    .validate(|value, e, emitter| {
+    .validate(|span, e, emitter| {
+        let value = &source[span.start..span.end];
+
         match value.parse::<i64>() {
             Ok(val) => LitExprKind::Long(val),
             Err(err) => {
@@ -46,12 +50,14 @@ pub(crate) fn long_lit<'a>() -> parser_return!(LitExprKind) {
     })
 }
 
-pub(crate) fn real_lit<'a>() -> parser_return!(LitExprKind) {
+pub(crate) fn real_lit<'a>(source: &'a str) -> parser_return!(LitExprKind) {
     select(|token, _| match token {
         TokenKind::Literal(LiteralKind::Real(value)) => Some(value),
         _ => None,
     })
-    .validate(|value, e, emitter| {
+    .validate(|span, e, emitter| {
+        let value = &source[span.start..span.end];
+
         match value.parse::<f64>() {
             Ok(val) => LitExprKind::Real(val),
             Err(err) => {
@@ -66,9 +72,9 @@ pub(crate) fn real_lit<'a>() -> parser_return!(LitExprKind) {
 }
 
 // TODO: Handle escape sequences in string literals
-pub(crate) fn string_lit<'a>() -> parser_return!(LitExprKind) {
+pub(crate) fn string_lit<'a>(source: &'a str) -> parser_return!(LitExprKind) {
     select(|token, _| match token {
-        TokenKind::Literal(LiteralKind::String(value)) => Some(value),
+        TokenKind::Literal(LiteralKind::String(value)) => Some(source[value.start..value.end].to_string()),
         _ => None,
     })
     .repeated()

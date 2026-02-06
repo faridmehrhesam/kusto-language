@@ -1,4 +1,4 @@
-use crate::token_parser::ParseOptions;
+use crate::token_parser::{ParseOptions, constants::MULTI_LINE_STRING_SEQUENCES};
 
 use super::utilities::*;
 
@@ -29,6 +29,55 @@ pub(crate) fn scan_trivia(bytes: &[u8], start: usize) -> Option<usize> {
     } else {
         Some(pos - start)
     }
+}
+
+pub(crate) fn scan_string_literal(bytes: &[u8], start: usize) -> Option<usize> {
+    let mut pos = start;
+    let mut byte = *peek(bytes, pos)?;
+
+    if byte == b'h' || byte == b'H' {
+        pos += 1;
+        byte = *peek(bytes, pos)?;
+    }
+
+    let is_verbatim = if byte == b'@' {
+        pos += 1;
+        byte = *peek(bytes, pos)?;
+        true
+    } else {
+        false
+    };
+
+    if byte == b'\'' || byte == b'"' {
+        pos += 1;
+
+        let content_len = scan_string_literal_content(bytes, pos, byte, is_verbatim)?;
+        pos += content_len;
+
+        if peek(bytes, pos) == Some(&byte) {
+            pos += 1;
+        } else {
+            return None;
+        }
+    } else {
+        for sequence in MULTI_LINE_STRING_SEQUENCES {
+            if matches_sequence(bytes, start, sequence) {
+                pos += sequence.len();
+                pos += scan_multi_line_string_literal(bytes, pos, sequence);
+                if matches_sequence(bytes, pos, sequence) {
+                    pos += sequence.len();
+                } else {
+                    return None;
+                }
+
+                return Some(pos - start);
+            }
+        }
+
+        return None;
+    }
+
+    Some(pos - start)
 }
 
 pub(crate) fn scan_goo(bytes: &[u8], start: usize, options: &ParseOptions) -> Option<usize> {
